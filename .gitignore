@@ -1,0 +1,36 @@
+# Maven build output
+**/target/
+*.class
+*.jar
+*.war
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+*.suo
+*.user
+
+# Node / React
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+
+# Environment & secrets
+**/.env
+**/.env.local
+**/.env.production
+**/application-secret.yml
+
+# Kafka data (if stored inside project)
+**/kafka-logs/
+**/zookeeper-data/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

@@ -1,0 +1,46 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: citizen-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/civicpulse_db
+    username: postgres
+    password: ${DB_PASSWORD}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080/realms/civicpulse
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+
+keycloak:
+  admin:
+    server-url: http://localhost:8080
+    master-realm: master
+    admin-username: AyanManna
+    admin-password: admin123
+    target-realm: civicpulse
+    citizen-role: CITIZEN
+
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+
+app:
+  jwt:
+    secret: ChangeThisToALongRandomSecretKeyAtLeast256BitsForHS256Algorithm
