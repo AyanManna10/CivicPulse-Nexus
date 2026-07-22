@@ -4,12 +4,10 @@ server:
 spring:
   application:
     name: certificate-service
-
   datasource:
     url: jdbc:postgresql://localhost:5432/civicpulse_db
     username: postgres
     password: ${DB_PASSWORD}
-
   jpa:
     hibernate:
       ddl-auto: validate
@@ -17,13 +15,11 @@ spring:
     properties:
       hibernate:
         format_sql: true
-
   security:
     oauth2:
       resourceserver:
         jwt:
           issuer-uri: http://localhost:8080/realms/civicpulse
-
   kafka:
     bootstrap-servers: localhost:9092
     producer:
@@ -31,6 +27,11 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
         spring.json.add.type.headers: false
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 5MB
+      max-request-size: 10MB
 
 springdoc:
   api-docs:
@@ -38,3 +39,7 @@ springdoc:
   swagger-ui:
     enabled: true
     path: /swagger-ui.html
+
+app:
+  upload:
+    certificate-docs: C:/Project/uploads/certificate-docs

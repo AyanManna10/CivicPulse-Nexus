@@ -53,7 +53,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "register-citizen", label: "Register Citizen",     icon: <HowToRegIcon fontSize="small" />,     roles: ["OFFICER", "ADMIN"], section: "Management" },
   { id: "file-grievance",   label: "File Grievance",       icon: <AddCommentIcon fontSize="small" />,   roles: ["OFFICER", "ADMIN"], section: "Management" },
   // Admin only
-  { id: "officer-mgmt",     label: "Manage Officers",      icon: <GroupIcon fontSize="small" />,        roles: ["ADMIN"], section: "Administration" },
+  { id: "officer-mgmt",     label: "Manage Officers And Citizens",      icon: <GroupIcon fontSize="small" />,        roles: ["ADMIN"], section: "Administration" },
   { id: "reports",          label: "Reports & Analytics",  icon: <BarChartIcon fontSize="small" />,     roles: ["ADMIN"], section: "Administration" },
 
   // ── Citizen ────────────────────────────────────────────────
@@ -638,7 +638,7 @@ export default function App() {
                       {isAdmin && (
                         <>
                           <Button variant="outlined" size="small" startIcon={<GroupIcon />} onClick={() => setTab("officer-mgmt")}>
-                            Manage Officers
+                            Manage Officers And Citizens
                           </Button>
                           <Button variant="outlined" size="small" color="secondary" startIcon={<BarChartIcon />} onClick={() => setTab("reports")}>
                             View Reports

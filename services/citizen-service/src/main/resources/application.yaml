@@ -27,6 +27,11 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
         spring.json.add.type.headers: false
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 5MB
+      max-request-size: 10MB
 
 keycloak:
   admin:
@@ -44,3 +49,5 @@ logging:
 app:
   jwt:
     secret: ChangeThisToALongRandomSecretKeyAtLeast256BitsForHS256Algorithm
+  upload:
+    citizen-docs: C:/Project/uploads/citizen-docs

@@ -1,5 +1,19 @@
 package com.civicpulse.certificateservice.controller;
 
+import com.civicpulse.certificateservice.entity.CertificateDocument;
+import com.civicpulse.certificateservice.repository.CertificateDocumentRepository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.nio.file.*;
+
+import java.util.Map;
+import java.util.List;
+
 import com.civicpulse.certificateservice.dto.*;
 import com.civicpulse.certificateservice.entity.CertificateStatus;
 import com.civicpulse.certificateservice.entity.CertificateType;
@@ -9,24 +23,104 @@ import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.Map;
+
+
 
 @RestController
 @RequestMapping("/api/certificates")
 public class CertificateController {
 
     private final CertificateService service;
+    private final CertificateDocumentRepository certDocRepo;
 
-    public CertificateController(CertificateService service) {
+    @Value("${app.upload.certificate-docs}")
+    private String uploadBasePath;
+
+    public CertificateController(CertificateService service,
+                                  CertificateDocumentRepository certDocRepo) {
         this.service = service;
+        this.certDocRepo = certDocRepo;
     }
+
+// ── Document upload for certificate application ───────────────────────────
+
+    @PostMapping("/{id}/documents")
+    @Operation(summary = "Upload supporting document for a certificate application")
+    public ResponseEntity<Map<String, Object>> uploadCertDoc(
+            @PathVariable Long id,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("docType") String docType) {
+
+        if (file.isEmpty())
+            return ResponseEntity.badRequest().body(Map.of("error", "File is empty"));
+
+        String ct = file.getContentType();
+        if (ct == null || (!ct.equals("application/pdf") && !ct.startsWith("image/")))
+            return ResponseEntity.badRequest().body(Map.of("error", "Only PDF, JPG, PNG allowed"));
+
+        try {
+            Path dir = Paths.get(uploadBasePath, String.valueOf(id));
+            Files.createDirectories(dir);
+            String orig = file.getOriginalFilename() != null ? file.getOriginalFilename() : "file";
+            String ext  = orig.contains(".") ? orig.substring(orig.lastIndexOf(".")) : ".bin";
+            String storedName = docType + "_" + System.currentTimeMillis() + ext;
+            Path dest = dir.resolve(storedName);
+            Files.copy(file.getInputStream(), dest, StandardCopyOption.REPLACE_EXISTING);
+
+            CertificateDocument doc = new CertificateDocument();
+            doc.setCertificateId(id);
+            doc.setDocType(docType);
+            doc.setOriginalName(orig);
+            doc.setStoredPath(dest.toString());
+            CertificateDocument saved = certDocRepo.save(doc);
+
+            return ResponseEntity.ok(Map.of(
+                    "id", saved.getId(),
+                    "docType", docType,
+                    "originalName", orig,
+                    "message", "Uploaded successfully"));
+        } catch (IOException e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", "Storage failed: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{id}/documents")
+    @Operation(summary = "List documents for a certificate application")
+    public List<CertificateDocument> getCertDocs(@PathVariable Long id) {
+        return certDocRepo.findByCertificateId(id);
+    }
+
+    @GetMapping("/documents/{docId}/view")
+public ResponseEntity<Resource> viewCertDoc(@PathVariable Long docId) {
+    CertificateDocument doc = certDocRepo.findById(docId)
+            .orElseThrow(() -> new RuntimeException("Document not found"));
+    try {
+        Path path = Paths.get(doc.getStoredPath());
+        Resource resource = new UrlResource(path.toUri());
+        if (!resource.exists()) return ResponseEntity.notFound().build();
+
+        String name = doc.getOriginalName().toLowerCase();
+        String ct;
+        if (name.endsWith(".pdf"))  ct = "application/pdf";
+        else if (name.endsWith(".png"))  ct = "image/png";
+        else if (name.endsWith(".jpg") || name.endsWith(".jpeg")) ct = "image/jpeg";
+        else ct = "application/octet-stream";
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(ct))
+                .header("Content-Disposition", "inline; filename=\"" + doc.getOriginalName() + "\"")
+                .header("Access-Control-Allow-Origin", "*")
+                .header("Cache-Control", "no-cache")
+                .body(resource);
+    } catch (Exception e) {
+        return ResponseEntity.internalServerError().build();
+    }
+}
 
     // ── CITIZEN ENDPOINTS ─────────────────────────────────────────────────────
 

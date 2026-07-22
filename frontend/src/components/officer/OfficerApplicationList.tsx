@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect  } from "react";
 import {
   Paper, Typography, Box, Button, TextField, Divider,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  IconButton, Collapse, Chip, Stack, Tooltip
+  IconButton, Collapse, Chip, Stack, Tooltip,
+  Dialog, DialogTitle, DialogContent, DialogActions, Alert
 } from "@mui/material";
 import VerifiedIcon from "@mui/icons-material/Verified";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -12,6 +13,8 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import SearchIcon from "@mui/icons-material/Search";
 import FilterListIcon from "@mui/icons-material/FilterList";
+import FolderOpenIcon from "@mui/icons-material/FolderOpen";
+import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import ApplicationStatusChip from "../shared/ApplicationStatusChip";
 import type { Certificate, CertificateStatus, CertificateType } from "../../types";
 import { api } from "../../api";
@@ -25,14 +28,10 @@ interface Props {
 }
 
 const TYPE_LABEL: Record<string, string> = {
-  BIRTH:            "Birth Certificate",
-  DEATH:            "Death Certificate",
-  INCOME:           "Income Certificate",
-  RESIDENCE:        "Residence Certificate",
-  MARRIAGE:         "Marriage Certificate",
-  TRADE_LICENSE:    "Trade License",
-  SHOP_LICENSE:     "Shop License",
-  BUILDING_PERMIT:  "Building Permit",
+  BIRTH: "Birth Certificate", DEATH: "Death Certificate",
+  INCOME: "Income Certificate", RESIDENCE: "Residence Certificate",
+  MARRIAGE: "Marriage Certificate", TRADE_LICENSE: "Trade License",
+  SHOP_LICENSE: "Shop License", BUILDING_PERMIT: "Building Permit",
   WATER_CONNECTION: "Water Connection",
 };
 
@@ -49,7 +48,6 @@ const TYPE_COLOR: Record<string, string> = {
   BUILDING_PERMIT: "#827717", WATER_CONNECTION: "#006064",
 };
 
-// Category badges to distinguish certificates from permits
 const TYPE_CATEGORY: Record<string, "Certificate" | "Permit"> = {
   BIRTH: "Certificate", DEATH: "Certificate", INCOME: "Certificate",
   RESIDENCE: "Certificate", MARRIAGE: "Certificate",
@@ -65,6 +63,19 @@ const TYPES: CertificateType[] = [
   "BIRTH", "DEATH", "INCOME", "RESIDENCE", "MARRIAGE",
   "TRADE_LICENSE", "SHOP_LICENSE", "BUILDING_PERMIT", "WATER_CONNECTION",
 ];
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  AADHAAR: "Aadhaar Card",
+  BIRTH_PROOF: "Birth Proof",
+  DEATH_PROOF: "Death Proof",
+  INCOME_PROOF: "Income Proof",
+  ADDRESS_PROOF: "Address Proof",
+  MARRIAGE_PROOF: "Marriage Proof",
+  BUSINESS_PROOF: "Business Proof",
+  LAND_DOCUMENT: "Land Document",
+  SITE_PLAN: "Site Plan",
+  OTHER: "Other Document",
+};
 
 // ── Search bar ────────────────────────────────────────────────────────────────
 
@@ -108,7 +119,6 @@ function SearchBar({ onSearch }: {
       <Collapse in={showFilters}>
         <Divider />
         <Box sx={{ p: 2, bgcolor: "#F8F9FC" }}>
-          {/* Status filters */}
           <Typography variant="caption" sx={{ fontWeight: 700, color: "#5A6072", display: "block", mb: 0.75, textTransform: "uppercase", letterSpacing: 0.5, fontSize: "0.68rem" }}>Status</Typography>
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mb: 2 }}>
             <Chip size="small" label="All" onClick={() => { setStatus(""); onSearch(name, "", type); }}
@@ -119,11 +129,7 @@ function SearchBar({ onSearch }: {
                 variant={status === s ? "filled" : "outlined"} color={status === s ? "primary" : "default"} />
             ))}
           </Box>
-
-          {/* Type filters — grouped */}
-          <Typography variant="caption" sx={{ fontWeight: 700, color: "#5A6072", display: "block", mb: 0.75, textTransform: "uppercase", letterSpacing: 0.5, fontSize: "0.68rem" }}>
-            Certificates
-          </Typography>
+          <Typography variant="caption" sx={{ fontWeight: 700, color: "#5A6072", display: "block", mb: 0.75, textTransform: "uppercase", letterSpacing: 0.5, fontSize: "0.68rem" }}>Certificates</Typography>
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mb: 1.5 }}>
             <Chip size="small" label="All Types" onClick={() => { setType(""); onSearch(name, status, ""); }}
               variant={type === "" ? "filled" : "outlined"} color={type === "" ? "secondary" : "default"} />
@@ -133,9 +139,7 @@ function SearchBar({ onSearch }: {
                 variant={type === t ? "filled" : "outlined"} color={type === t ? "secondary" : "default"} />
             ))}
           </Box>
-          <Typography variant="caption" sx={{ fontWeight: 700, color: "#5A6072", display: "block", mb: 0.75, textTransform: "uppercase", letterSpacing: 0.5, fontSize: "0.68rem" }}>
-            Permits &amp; Licences
-          </Typography>
+          <Typography variant="caption" sx={{ fontWeight: 700, color: "#5A6072", display: "block", mb: 0.75, textTransform: "uppercase", letterSpacing: 0.5, fontSize: "0.68rem" }}>Permits &amp; Licences</Typography>
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
             {TYPES.filter(t => TYPE_CATEGORY[t] === "Permit").map((t) => (
               <Chip key={t} size="small" label={`${TYPE_ICON[t]} ${t.replace(/_/g, " ")}`}
@@ -151,28 +155,26 @@ function SearchBar({ onSearch }: {
 
 // ── Expandable application row ────────────────────────────────────────────────
 
-function ApplicationRow({ c, onVerify, onApprove, onReject, onGenerate, onDownload }: {
+function ApplicationRow({ c, onVerify, onApprove, onReject, onGenerate, onDownload, onViewDocs }: {
   c: Certificate;
   onVerify: (id: number) => void;
   onApprove: (id: number) => void;
   onReject: (id: number, reason: string) => void;
   onGenerate: (id: number) => void;
   onDownload: (c: Certificate) => void;
+  onViewDocs: (c: Certificate) => void;
 }) {
-  const [expanded, setExpanded]     = useState(false);
+  const [expanded, setExpanded]         = useState(false);
   const [rejectReason, setRejectReason] = useState("");
-  const [showReject, setShowReject] = useState(false);
+  const [showReject, setShowReject]     = useState(false);
 
   const typeColor    = TYPE_COLOR[c.certificateType] ?? "#1A3A8F";
   const typeCategory = TYPE_CATEGORY[c.certificateType] ?? "Certificate";
 
   return (
     <>
-      <TableRow
-        hover
-        sx={{ cursor: "pointer", borderLeft: `3px solid ${typeColor}` }}
-        onClick={() => setExpanded(!expanded)}
-      >
+      <TableRow hover sx={{ cursor: "pointer", borderLeft: `3px solid ${typeColor}` }}
+        onClick={() => setExpanded(!expanded)}>
         <TableCell>
           <Typography variant="caption" sx={{ fontWeight: 700, color: "#0F2557", fontFamily: "monospace" }}>
             {c.applicationNumber}
@@ -191,21 +193,15 @@ function ApplicationRow({ c, onVerify, onApprove, onReject, onGenerate, onDownlo
               <Typography variant="caption" sx={{ fontWeight: 600, color: typeColor, display: "block", lineHeight: 1.2 }}>
                 {TYPE_LABEL[c.certificateType] ?? c.certificateType}
               </Typography>
-              <Chip
-                size="small"
-                label={typeCategory}
-                sx={{
-                  height: 16, fontSize: "0.6rem", fontWeight: 700,
-                  bgcolor: typeCategory === "Certificate" ? "#E3F2FD" : "#FFF3E0",
-                  color: typeCategory === "Certificate" ? "#1565C0" : "#E65100",
-                }}
-              />
+              <Chip size="small" label={typeCategory} sx={{
+                height: 16, fontSize: "0.6rem", fontWeight: 700,
+                bgcolor: typeCategory === "Certificate" ? "#E3F2FD" : "#FFF3E0",
+                color: typeCategory === "Certificate" ? "#1565C0" : "#E65100",
+              }} />
             </Box>
           </Box>
         </TableCell>
-        <TableCell>
-          <ApplicationStatusChip status={c.status} />
-        </TableCell>
+        <TableCell><ApplicationStatusChip status={c.status} /></TableCell>
         <TableCell>
           <Typography variant="caption" color="text.secondary">
             {new Date(c.appliedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
@@ -213,6 +209,13 @@ function ApplicationRow({ c, onVerify, onApprove, onReject, onGenerate, onDownlo
         </TableCell>
         <TableCell onClick={(e) => e.stopPropagation()}>
           <Stack direction="row" spacing={0.5}>
+            {/* View Documents button — always visible */}
+            <Tooltip title="View submitted documents">
+              <IconButton size="small" onClick={() => onViewDocs(c)} sx={{ color: "#1A3A8F" }}>
+                <FolderOpenIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+
             {(c.status === "SUBMITTED" || c.status === "UNDER_VERIFICATION") && (
               <>
                 <Tooltip title="Mark as Verified">
@@ -266,7 +269,7 @@ function ApplicationRow({ c, onVerify, onApprove, onReject, onGenerate, onDownlo
         </TableCell>
       </TableRow>
 
-      {/* Expanded detail */}
+      {/* Expanded detail row */}
       <TableRow>
         <TableCell colSpan={7} sx={{ py: 0, border: 0 }}>
           <Collapse in={expanded} timeout="auto">
@@ -298,13 +301,10 @@ function ApplicationRow({ c, onVerify, onApprove, onReject, onGenerate, onDownlo
 
               {showReject && (
                 <Box sx={{ mt: 1.5 }}>
-                  <TextField
-                    fullWidth multiline rows={2} size="small"
+                  <TextField fullWidth multiline rows={2} size="small"
                     label="Reason for rejection (citizen will see this)"
-                    value={rejectReason}
-                    onChange={(e) => setRejectReason(e.target.value)}
-                    sx={{ mb: 1, bgcolor: "#fff" }}
-                  />
+                    value={rejectReason} onChange={(e) => setRejectReason(e.target.value)}
+                    sx={{ mb: 1, bgcolor: "#fff" }} />
                   <Stack direction="row" spacing={1}>
                     <Button size="small" variant="contained" color="error"
                       onClick={() => {
@@ -329,11 +329,99 @@ function ApplicationRow({ c, onVerify, onApprove, onReject, onGenerate, onDownlo
   );
 }
 
+// ── Documents Dialog ──────────────────────────────────────────────────────────
+
+function CertDocumentsDialog({ cert, onClose }: {
+  cert: Certificate | null;
+  onClose: () => void;
+}) {
+  const [docs, setDocs]       = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded]   = useState(false);
+
+  // Fetch docs when cert changes
+  useEffect(() => {
+  if (!cert) return;
+  setLoading(true);
+  setLoaded(false);
+  api.get(`/api/certificates/${cert.id}/documents`)
+    .then(res => { setDocs(res.data); setLoaded(true); })
+    .catch(() => { setDocs([]); setLoaded(true); })
+    .finally(() => setLoading(false));
+}, [cert?.id]);
+
+  if (!cert) return null;
+
+  return (
+    <Dialog open={!!cert} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ fontWeight: 700, color: "#0F2557", borderBottom: "1px solid #E4E8F0" }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <FolderOpenIcon sx={{ color: "#1A3A8F" }} />
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 700, color: "#0F2557", lineHeight: 1.1 }}>
+              Submitted Documents
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {TYPE_LABEL[cert.certificateType]} · {cert.citizenName} · {cert.applicationNumber}
+            </Typography>
+          </Box>
+        </Box>
+      </DialogTitle>
+      <DialogContent sx={{ pt: 2 }}>
+        {loading ? (
+          <Box sx={{ py: 4, textAlign: "center" }}>
+            <Typography variant="body2" color="text.secondary">Loading documents...</Typography>
+          </Box>
+        ) : !loaded || docs.length === 0 ? (
+          <Alert severity="warning" sx={{ mt: 1 }}>
+            No documents uploaded for this application. The citizen may not have attached any files.
+          </Alert>
+        ) : (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mt: 1 }}>
+            <Typography variant="caption" sx={{ color: "#5A6072", fontWeight: 700 }}>
+              {docs.length} document(s) submitted
+            </Typography>
+            {docs.map((doc: any) => (
+              <Box key={doc.id} sx={{ display: "flex", alignItems: "center", gap: 1.5, p: 1.5, bgcolor: "#F8F9FC", borderRadius: 1.5, border: "1px solid #E4E8F0" }}>
+                <InsertDriveFileIcon sx={{ color: "#1A3A8F", fontSize: 24, flexShrink: 0 }} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: "#0F2557" }}>
+                    {DOC_TYPE_LABELS[doc.docType] || doc.docType}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {doc.originalName}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: "#9AA3B5", fontSize: "0.68rem" }}>
+                    Uploaded: {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleString("en-IN") : "—"}
+                  </Typography>
+                </Box>
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={() => window.open(`http://localhost:9000/api/certificates/documents/${doc.id}/view`, "_blank")}
+                  sx={{ fontSize: "0.72rem", whiteSpace: "nowrap", flexShrink: 0 }}
+                >
+                  View
+                </Button>
+              </Box>
+            ))}
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} variant="outlined">Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function OfficerApplicationList({
   certificates, onError, onLoadingChange, onChanged, onSearchChange
 }: Props) {
+  const [docsCert, setDocsCert] = useState<Certificate | null>(null);
+
   const verify = async (id: number) => {
     onError(""); onLoadingChange(true);
     try { await api.put(`/api/certificates/${id}/verify`, { verified: true }); onChanged(); }
@@ -364,24 +452,23 @@ export default function OfficerApplicationList({
       const res = await api.get(`/api/certificates/${cert.id}/download`, { responseType: "blob" });
       const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
       const link = document.createElement("a");
-      link.href = url;
-      link.download = `${cert.certificateNumber ?? "certificate"}.pdf`;
+      link.href = url; link.download = `${cert.certificateNumber ?? "certificate"}.pdf`;
       document.body.appendChild(link); link.click(); link.remove();
       window.URL.revokeObjectURL(url);
       onChanged();
     } catch { onError("Download failed"); } finally { onLoadingChange(false); }
   };
 
-  const pendingCount    = certificates.filter(c => c.status === "SUBMITTED" || c.status === "UNDER_VERIFICATION").length;
-  const verifiedCount   = certificates.filter(c => c.status === "VERIFIED").length;
-  const approvedCount   = certificates.filter(c => c.status === "APPROVED").length;
-  const generatedCount  = certificates.filter(c => c.status === "CERTIFICATE_GENERATED" || c.status === "DOWNLOADED").length;
+  const pendingCount   = certificates.filter(c => c.status === "SUBMITTED" || c.status === "UNDER_VERIFICATION").length;
+  const verifiedCount  = certificates.filter(c => c.status === "VERIFIED").length;
+  const approvedCount  = certificates.filter(c => c.status === "APPROVED").length;
+  const generatedCount = certificates.filter(c => c.status === "CERTIFICATE_GENERATED" || c.status === "DOWNLOADED").length;
 
   return (
     <>
       <SearchBar onSearch={onSearchChange} />
 
-      {/* Pipeline summary strip */}
+      {/* Pipeline summary */}
       {certificates.length > 0 && (
         <Box sx={{ mb: 2.5, display: "flex", gap: 1.5, flexWrap: "wrap" }}>
           {[
@@ -423,12 +510,19 @@ export default function OfficerApplicationList({
                   key={c.id} c={c}
                   onVerify={verify} onApprove={approve}
                   onReject={reject} onGenerate={generate} onDownload={download}
+                  onViewDocs={(cert) => setDocsCert(cert)}
                 />
               ))}
             </TableBody>
           </Table>
         </TableContainer>
       )}
+
+      {/* Certificate Documents Dialog */}
+      <CertDocumentsDialog
+        cert={docsCert}
+        onClose={() => setDocsCert(null)}
+      />
     </>
   );
 }
