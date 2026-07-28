@@ -41,6 +41,7 @@ keycloak:
     admin-password: admin123
     target-realm: civicpulse
     citizen-role: CITIZEN
+    client-secret: jN2aoubARsn0k9sdqRumX7Mxb4CJ2NMY
 
 logging:
   level:

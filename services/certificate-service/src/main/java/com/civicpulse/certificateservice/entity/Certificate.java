@@ -14,7 +14,6 @@ public class Certificate {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Human-readable reference number, e.g. APP-2026-000001
     @Column(unique = true)
     private String applicationNumber;
 
@@ -26,37 +25,39 @@ public class Certificate {
 
     private String citizenAddress;
 
-    // 12-digit Aadhaar number (stored as-provided; masking optional at display layer)
     private String aadhaarNumber;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private CertificateType certificateType;
 
-    // Main workflow status
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private CertificateStatus status = CertificateStatus.SUBMITTED;
 
-    // Officer who applied / username from JWT preferred_username claim
+    /**
+     * Department automatically assigned at submission time based on certificate type.
+     * Officers belonging to this department can see and process this application.
+     * Mapping:
+     *   BIRTH / DEATH           → Health Department
+     *   INCOME / RESIDENCE      → Revenue Department
+     *   MARRIAGE                → Civil Registration Department
+     *   TRADE_LICENSE / SHOP_LICENSE → Commerce Department
+     *   BUILDING_PERMIT         → Engineering Department
+     *   WATER_CONNECTION        → Water Supply Department
+     */
+    @Column(name = "assigned_department")
+    private String assignedDepartment;
+
     private String appliedBy;
-
-    // Officer who verified documents
     private String verifiedBy;
-
-    // Officer/Admin who approved or rejected
     private String decidedBy;
-
-    // Rejection reason — required when status = REJECTED
     private String rejectionReason;
-
-    // General remarks (optional, e.g. notes during approval)
     private String remarks;
 
-    // Generated certificate number, e.g. BC-2026-0001 — only set on CERTIFICATE_GENERATED
+    @Column(unique = true)
     private String certificateNumber;
 
-    // How many times the PDF has been downloaded
     @Column(nullable = false)
     private Integer downloadCount = 0;
 

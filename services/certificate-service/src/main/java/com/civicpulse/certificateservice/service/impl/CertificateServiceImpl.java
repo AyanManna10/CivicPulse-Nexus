@@ -27,22 +27,43 @@ public class CertificateServiceImpl implements CertificateService {
     private final CertificateEventProducer eventProducer;
 
     private final AtomicLong appSeq;
-private final AtomicLong certSeq;
+    private final AtomicLong certSeq;
 
-public CertificateServiceImpl(CertificateRepository repository,
-                               CertificatePdfGenerator pdfGenerator,
-                               CertificateEventProducer eventProducer) {
-    this.repository    = repository;
-    this.pdfGenerator  = pdfGenerator;
-    this.eventProducer = eventProducer;
-    // Seed sequences from DB so restart doesn't cause duplicate key errors
-    long appCount  = repository.count();
-    long certCount = repository.countByCertificateNumberIsNotNull();
-    this.appSeq  = new AtomicLong(appCount + 1);
-    this.certSeq = new AtomicLong(certCount + 1);
-}
+    // ── Certificate type → Department routing map ─────────────────────────────
+    // This is the single source of truth for which department handles which cert.
+    // When an officer logs in, only certs whose assignedDepartment matches their
+    // department are returned to them by the filtered controller endpoint.
+    private static final Map<CertificateType, String> TYPE_TO_DEPT = Map.of(
+    CertificateType.BIRTH,            "Health Department",
+    CertificateType.DEATH,            "Health Department",
+    CertificateType.INCOME,           "Revenue Department",
+    CertificateType.RESIDENCE,        "Revenue Department",
+    CertificateType.MARRIAGE,         "Municipal Administration",
+    CertificateType.TRADE_LICENSE,    "Municipal Administration",
+    CertificateType.SHOP_LICENSE,     "Municipal Administration",
+    CertificateType.BUILDING_PERMIT,  "Engineering Department",
+    CertificateType.WATER_CONNECTION, "Water Department"
+);
 
- 
+    public CertificateServiceImpl(CertificateRepository repository,
+                                   CertificatePdfGenerator pdfGenerator,
+                                   CertificateEventProducer eventProducer) {
+        this.repository    = repository;
+        this.pdfGenerator  = pdfGenerator;
+        this.eventProducer = eventProducer;
+        long appCount  = repository.count();
+        long certCount = repository.countByCertificateNumberIsNotNull();
+        this.appSeq  = new AtomicLong(appCount + 1);
+        this.certSeq = new AtomicLong(certCount + 1);
+    }
+
+    // ── Helper: resolve department for a certificate type ─────────────────────
+
+    public static String resolveDepartment(CertificateType type) {
+        return TYPE_TO_DEPT.getOrDefault(type, "General Administration");
+    }
+
+    // ── Apply (submit new application) ────────────────────────────────────────
 
     @Override
     public CertificateResponse apply(CertificateRequest request, String appliedBy) {
@@ -63,6 +84,8 @@ public CertificateServiceImpl(CertificateRepository repository,
         cert.setCertificateType(request.getCertificateType());
         cert.setStatus(CertificateStatus.SUBMITTED);
         cert.setAppliedBy(appliedBy);
+        // ── Auto-route to the correct department at submission time ──────────
+        cert.setAssignedDepartment(resolveDepartment(request.getCertificateType()));
 
         Certificate saved = repository.save(cert);
 
@@ -72,11 +95,13 @@ public CertificateServiceImpl(CertificateRepository repository,
                     saved.getCitizenId(), saved.getCitizenName(),
                     saved.getCertificateType().name(), saved.getStatus().name()));
         } catch (Exception e) {
-            // Kafka unavailable — event not critical, continue
+            // Kafka unavailable — not critical, continue
         }
 
         return toResponse(saved);
     }
+
+    // ── Verify ────────────────────────────────────────────────────────────────
 
     @Override
     public CertificateResponse verify(Long id, VerificationRequest request, String officerUsername) {
@@ -106,6 +131,8 @@ public CertificateServiceImpl(CertificateRepository repository,
         return toResponse(saved);
     }
 
+    // ── Approve ───────────────────────────────────────────────────────────────
+
     @Override
     public CertificateResponse approve(Long id, String officerUsername) {
         Certificate cert = findOrThrow(id);
@@ -119,7 +146,6 @@ public CertificateServiceImpl(CertificateRepository repository,
         cert.setDecidedAt(LocalDateTime.now());
 
         Certificate saved = repository.save(cert);
-
         eventProducer.publishApproved(new CertificateApprovedEvent(
                 saved.getId(), saved.getApplicationNumber(),
                 saved.getCitizenId(), saved.getCitizenName(),
@@ -128,28 +154,31 @@ public CertificateServiceImpl(CertificateRepository repository,
         return toResponse(saved);
     }
 
+    // ── Reject ────────────────────────────────────────────────────────────────
+
     @Override
-    public CertificateResponse reject(Long id, RejectionRequest request, String officerUsername) {
+    public CertificateResponse reject(Long id, DecisionRequest request, String officerUsername) {
         Certificate cert = findOrThrow(id);
         if (cert.getStatus() == CertificateStatus.CERTIFICATE_GENERATED
                 || cert.getStatus() == CertificateStatus.DOWNLOADED) {
-            throw new IllegalStateException("Cannot reject a certificate that has already been generated.");
+            throw new IllegalStateException("Cannot reject an already-issued certificate.");
         }
 
         cert.setStatus(CertificateStatus.REJECTED);
-        cert.setRejectionReason(request.getReason());
         cert.setDecidedBy(officerUsername);
         cert.setDecidedAt(LocalDateTime.now());
+        cert.setRejectionReason(request.getRejectionReason());
 
         return toResponse(repository.save(cert));
     }
 
+    // ── Generate certificate PDF ──────────────────────────────────────────────
+
     @Override
-    public CertificateResponse generateCertificate(Long id) {
+    public CertificateResponse generate(Long id, String officerUsername) {
         Certificate cert = findOrThrow(id);
         if (cert.getStatus() != CertificateStatus.APPROVED) {
-            throw new IllegalStateException(
-                    "Only APPROVED applications can have a certificate generated. Current: " + cert.getStatus());
+            throw new IllegalStateException("Only APPROVED applications can have certificates generated.");
         }
 
         cert.setStatus(CertificateStatus.CERTIFICATE_GENERATED);
@@ -158,38 +187,44 @@ public CertificateServiceImpl(CertificateRepository repository,
 
         Certificate saved = repository.save(cert);
 
-        eventProducer.publishGenerated(new CertificateGeneratedEvent(
-                saved.getId(), saved.getApplicationNumber(),
-                saved.getCitizenId(), saved.getCitizenName(),
-                saved.getCertificateType().name(), saved.getStatus().name()));
+        try {
+            pdfGenerator.generate(saved);
+        } catch (IOException e) {
+            throw new UncheckedIOException("PDF generation failed for cert " + id, e);
+        }
+
+        try {
+            eventProducer.publishGenerated(new CertificateGeneratedEvent(
+                    saved.getId(), saved.getApplicationNumber(),
+                    saved.getCitizenId(), saved.getCitizenName(),
+                    saved.getCertificateType().name(), saved.getStatus().name()));
+        } catch (Exception ignored) { }
 
         return toResponse(saved);
     }
+
+    // ── Download (increment count) ────────────────────────────────────────────
 
     @Override
     public byte[] downloadPdf(Long id) {
         Certificate cert = findOrThrow(id);
         if (cert.getStatus() != CertificateStatus.CERTIFICATE_GENERATED
                 && cert.getStatus() != CertificateStatus.DOWNLOADED) {
-            throw new IllegalStateException(
-                    "Certificate must be GENERATED before download. Current: " + cert.getStatus());
+            throw new IllegalStateException("Certificate PDF not yet available.");
         }
 
-        cert.setStatus(CertificateStatus.DOWNLOADED);
         cert.setDownloadCount(cert.getDownloadCount() + 1);
+        cert.setStatus(CertificateStatus.DOWNLOADED);
         repository.save(cert);
 
         try {
-            return pdfGenerator.generate(cert);
+            return pdfGenerator.getPdfBytes(cert);
         } catch (IOException e) {
-            throw new UncheckedIOException("PDF generation failed", e);
+            throw new UncheckedIOException("Failed to read certificate PDF for cert " + id, e);
         }
     }
 
-    @Override
-    public List<CertificateResponse> getAll() {
-        return repository.findAll().stream().map(this::toResponse).collect(Collectors.toList());
-    }
+    // ── Query methods ─────────────────────────────────────────────────────────
 
     @Override
     public CertificateResponse getById(Long id) {
@@ -197,50 +232,56 @@ public CertificateServiceImpl(CertificateRepository repository,
     }
 
     @Override
+    public List<CertificateResponse> getAll() {
+        return repository.findAll().stream().map(this::toResponse).toList();
+    }
+
+    /**
+     * Returns only certificates assigned to the given department.
+     * Used by officers so they only see applications relevant to their dept.
+     */
+    @Override
+    public List<CertificateResponse> getByDepartment(String department) {
+        return repository.findByAssignedDepartment(department)
+                .stream().map(this::toResponse).toList();
+    }
+
+    @Override
     public List<CertificateResponse> getByCitizen(Long citizenId) {
-        return repository.findByCitizenId(citizenId).stream()
-                .map(this::toResponse).collect(Collectors.toList());
+        return repository.findByCitizenId(citizenId).stream().map(this::toResponse).toList();
+    }
+
+    @Override
+    public List<CertificateResponse> getPending() {
+        return repository.findPendingApplications().stream().map(this::toResponse).toList();
     }
 
     @Override
     public List<CertificateResponse> getByStatus(CertificateStatus status) {
-        return repository.findByStatus(status).stream()
-                .map(this::toResponse).collect(Collectors.toList());
+        return repository.findByStatus(status).stream().map(this::toResponse).toList();
     }
 
     @Override
-public List<CertificateResponse> search(String citizenName, CertificateStatus status, CertificateType type) {
-    List<Certificate> all = repository.findAll();
-    
-    return all.stream()
-            .filter(c -> citizenName == null || citizenName.isBlank() || 
-                    c.getCitizenName().toLowerCase().contains(citizenName.toLowerCase()))
-            .filter(c -> status == null || c.getStatus() == status)
-            .filter(c -> type == null || c.getCertificateType() == type)
-            .map(this::toResponse)
-            .collect(Collectors.toList());
-}
+    public List<CertificateResponse> getByType(CertificateType type) {
+        return repository.findByCertificateType(type).stream().map(this::toResponse).toList();
+    }
 
     @Override
     public Map<String, Long> getStats() {
         List<Certificate> all = repository.findAll();
         return Map.of(
-                "total",           (long) all.size(),
-                "submitted",       count(all, CertificateStatus.SUBMITTED),
-                "underVerification", count(all, CertificateStatus.UNDER_VERIFICATION),
-                "verified",        count(all, CertificateStatus.VERIFIED),
-                "approved",        count(all, CertificateStatus.APPROVED),
-                "rejected",        count(all, CertificateStatus.REJECTED),
-                "generated",       count(all, CertificateStatus.CERTIFICATE_GENERATED),
-                "downloaded",      count(all, CertificateStatus.DOWNLOADED)
+                "total",            (long) all.size(),
+                "submitted",        all.stream().filter(c -> c.getStatus() == CertificateStatus.SUBMITTED).count(),
+                "underVerification",all.stream().filter(c -> c.getStatus() == CertificateStatus.UNDER_VERIFICATION).count(),
+                "verified",         all.stream().filter(c -> c.getStatus() == CertificateStatus.VERIFIED).count(),
+                "approved",         all.stream().filter(c -> c.getStatus() == CertificateStatus.APPROVED).count(),
+                "rejected",         all.stream().filter(c -> c.getStatus() == CertificateStatus.REJECTED).count(),
+                "generated",        all.stream().filter(c -> c.getStatus() == CertificateStatus.CERTIFICATE_GENERATED).count(),
+                "downloaded",       all.stream().filter(c -> c.getStatus() == CertificateStatus.DOWNLOADED).count()
         );
     }
 
-    // ── helpers ──────────────────────────────────────────────────────────────
-
-    private long count(List<Certificate> all, CertificateStatus status) {
-        return all.stream().filter(c -> c.getStatus() == status).count();
-    }
+    // ── Private helpers ───────────────────────────────────────────────────────
 
     private Certificate findOrThrow(Long id) {
         return repository.findById(id)
@@ -251,36 +292,43 @@ public List<CertificateResponse> search(String citizenName, CertificateStatus st
         return String.format("APP-%d-%06d", Year.now().getValue(), appSeq.getAndIncrement());
     }
 
-    /**
-     * Generates a unique certificate / permit reference number.
-     * Certificates use short prefix codes; permits use domain-specific codes.
-     */
     private String generateCertNumber(CertificateType type) {
         String prefix = switch (type) {
-            // Certificates
-            case BIRTH           -> "BC";
-            case DEATH           -> "DC";
-            case INCOME          -> "IC";
-            case RESIDENCE       -> "RC";
-            case MARRIAGE        -> "MC";
-            // Permits & Licences
-            case TRADE_LICENSE   -> "TL";
-            case SHOP_LICENSE    -> "SL";
-            case BUILDING_PERMIT -> "BP";
-            case WATER_CONNECTION-> "WC";
+            case BIRTH            -> "BC";
+            case DEATH            -> "DC";
+            case INCOME           -> "IC";
+            case RESIDENCE        -> "RC";
+            case MARRIAGE         -> "MC";
+            case TRADE_LICENSE    -> "TL";
+            case SHOP_LICENSE     -> "SL";
+            case BUILDING_PERMIT  -> "BP";
+            case WATER_CONNECTION -> "WC";
         };
         return String.format("%s-%d-%04d", prefix, Year.now().getValue(), certSeq.getAndIncrement());
     }
 
     private CertificateResponse toResponse(Certificate c) {
-        return new CertificateResponse(
-                c.getId(), c.getApplicationNumber(), c.getCitizenId(),
-                c.getCitizenName(), c.getCitizenAddress(), c.getAadhaarNumber(),
-                c.getCertificateType(), c.getStatus(),
-                c.getAppliedBy(), c.getVerifiedBy(), c.getDecidedBy(),
-                c.getRejectionReason(), c.getRemarks(),
-                c.getCertificateNumber(), c.getDownloadCount(),
-                c.getAppliedAt(), c.getVerifiedAt(), c.getDecidedAt(), c.getIssuedAt()
-        );
+        CertificateResponse r = new CertificateResponse();
+        r.setId(c.getId());
+        r.setApplicationNumber(c.getApplicationNumber());
+        r.setCitizenId(c.getCitizenId());
+        r.setCitizenName(c.getCitizenName());
+        r.setCitizenAddress(c.getCitizenAddress());
+        r.setAadhaarNumber(c.getAadhaarNumber());
+        r.setCertificateType(c.getCertificateType());
+        r.setStatus(c.getStatus());
+        r.setAssignedDepartment(c.getAssignedDepartment());
+        r.setAppliedBy(c.getAppliedBy());
+        r.setVerifiedBy(c.getVerifiedBy());
+        r.setDecidedBy(c.getDecidedBy());
+        r.setRejectionReason(c.getRejectionReason());
+        r.setRemarks(c.getRemarks());
+        r.setCertificateNumber(c.getCertificateNumber());
+        r.setDownloadCount(c.getDownloadCount());
+        r.setAppliedAt(c.getAppliedAt());
+        r.setVerifiedAt(c.getVerifiedAt());
+        r.setDecidedAt(c.getDecidedAt());
+        r.setIssuedAt(c.getIssuedAt());
+        return r;
     }
 }

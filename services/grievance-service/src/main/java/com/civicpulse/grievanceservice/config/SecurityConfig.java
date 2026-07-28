@@ -42,7 +42,7 @@ public class SecurityConfig {
                         // Officer / Admin: full grievance list, dashboard, SLA, department views
                         .requestMatchers(HttpMethod.GET, "/api/grievances/dashboard").hasAnyRole("ADMIN", "OFFICER")
                         .requestMatchers(HttpMethod.GET, "/api/grievances/sla").hasAnyRole("ADMIN", "OFFICER")
-                        .requestMatchers(HttpMethod.GET, "/api/grievances/citizen/**").hasAnyRole("ADMIN", "OFFICER")
+                        .requestMatchers(HttpMethod.GET, "/api/grievances/citizen/**").hasAnyRole("ADMIN", "OFFICER", "CITIZEN")
                         .requestMatchers(HttpMethod.GET, "/api/grievances/department/**").hasAnyRole("ADMIN", "OFFICER")
                         .requestMatchers(HttpMethod.GET, "/api/grievances/status/**").hasAnyRole("ADMIN", "OFFICER")
 

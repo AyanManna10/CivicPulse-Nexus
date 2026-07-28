@@ -7,14 +7,17 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/officers")
-@Tag(name = "Officer Management", description = "Admin operations for managing department officers")
+@Tag(name = "Officer Management", description = "Admin and department-head operations for managing officers")
 public class OfficerController {
 
     private final OfficerService officerService;
@@ -22,6 +25,36 @@ public class OfficerController {
     public OfficerController(OfficerService officerService) {
         this.officerService = officerService;
     }
+
+    // ── Profile of the calling officer ────────────────────────────────────────
+
+    /**
+     * Returns the officer record for the currently authenticated user.
+     *
+     * Used by the frontend immediately after login to:
+     *   1. Determine which department the officer belongs to.
+     *   2. Determine if they are a department head (headOfficer=true).
+     *
+     * Resolution order: JWT `email` → JWT `preferred_username`.
+     * If the officer is not in the DB (e.g. purely Keycloak-managed), returns 404.
+     */
+    @GetMapping("/me")
+    @Operation(summary = "Get the authenticated officer's own profile")
+    public OfficerResponse getMe(@AuthenticationPrincipal Jwt jwt) {
+        String email = jwt.getClaim("email");
+        if (email != null && !email.isBlank()) {
+            return officerService.getOfficerByEmail(email);
+        }
+        // Fallback: some tokens use preferred_username instead of email
+        String username = jwt.getClaim("preferred_username");
+        if (username != null && !username.isBlank()) {
+            return officerService.getOfficerByEmail(username);
+        }
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "Officer profile not found for the current token");
+    }
+
+    // ── Admin / Department-head read operations ───────────────────────────────
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -31,7 +64,7 @@ public class OfficerController {
     }
 
     @GetMapping
-    @Operation(summary = "Get all officers")
+    @Operation(summary = "Get all officers (Admin only)")
     public List<OfficerResponse> getAllOfficers() {
         return officerService.getAllOfficers();
     }
@@ -43,7 +76,7 @@ public class OfficerController {
     }
 
     @GetMapping("/department/{department}")
-    @Operation(summary = "Get officers by department")
+    @Operation(summary = "Get officers by department (Admin or department head)")
     public List<OfficerResponse> getByDepartment(@PathVariable String department) {
         return officerService.getOfficersByDepartment(department);
     }
@@ -54,34 +87,29 @@ public class OfficerController {
         return officerService.getHeadOfficersByDepartment(department);
     }
 
+    // ── Update operations (Admin full; dept-head limited) ─────────────────────
+
     @PutMapping("/{id}")
-    @Operation(summary = "Update officer details (Admin only)")
+    @Operation(summary = "Update officer details")
     public OfficerResponse updateOfficer(@PathVariable Long id,
                                           @Valid @RequestBody OfficerRequest request) {
         return officerService.updateOfficer(id, request);
     }
 
-    /** Sets status = INACTIVE */
     @PutMapping("/{id}/deactivate")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Deactivate officer (Admin only)")
+    @Operation(summary = "Deactivate officer")
     public void deactivateOfficer(@PathVariable Long id) {
         officerService.deactivateOfficer(id);
     }
 
-    /** Sets status = ACTIVE */
     @PutMapping("/{id}/activate")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Activate officer (Admin only)")
+    @Operation(summary = "Activate officer")
     public void activateOfficer(@PathVariable Long id) {
         officerService.activateOfficer(id);
     }
 
-    /**
-     * Pulls all OFFICER/ADMIN users from Keycloak and inserts any that are
-     * missing from the officers table.  Existing DB rows are never overwritten.
-     * Returns how many new records were created.
-     */
     @PostMapping("/import-from-keycloak")
     @Operation(summary = "Import existing Keycloak officers into DB (Admin only)")
     public Map<String, Object> importFromKeycloak() {
@@ -94,11 +122,11 @@ public class OfficerController {
         );
     }
 
-    /** Kept for backwards compatibility — same as /deactivate */
-    @DeleteMapping("/{id}")
+@DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    @Operation(summary = "Deactivate officer via DELETE (Admin only)")
-    public void deactivateOfficerDelete(@PathVariable Long id) {
-        officerService.deactivateOfficer(id);
+    @Operation(summary = "Delete an officer (Admin only)")
+    public void deleteOfficer(@PathVariable Long id) {
+        officerService.deleteOfficer(id);
     }
 }
+

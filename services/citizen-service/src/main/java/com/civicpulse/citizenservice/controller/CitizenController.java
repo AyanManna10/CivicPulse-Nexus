@@ -314,7 +314,41 @@ public ResponseEntity<Resource> viewDocument(@PathVariable Long docId) {
         pendingRepo.save(pr);
 
         return ResponseEntity.ok(Map.of("message", "Citizen approved and account created. Login credentials sent via phone."));
+
+        
     }
+    // ── Change own password via Keycloak ─────────────────────────────────────
+
+@PostMapping("/change-password")
+@Operation(summary = "Change own Keycloak password")
+public ResponseEntity<Map<String, String>> changePassword(
+        @AuthenticationPrincipal Jwt jwt,
+        @RequestBody Map<String, String> body) {
+    String oldPassword = body.get("oldPassword");
+    String newPassword = body.get("newPassword");
+
+    if (oldPassword == null || oldPassword.isBlank())
+        return ResponseEntity.badRequest().body(Map.of("error", "Current password is required"));
+    if (newPassword == null || newPassword.length() < 8)
+        return ResponseEntity.badRequest().body(Map.of("error", "New password must be at least 8 characters"));
+
+    String email = jwt.getClaimAsString("email");
+    // Keycloak stores usernames lowercase — normalize to avoid 400
+    String username = jwt.getClaimAsString("preferred_username").toLowerCase();
+
+    boolean valid = keycloakProvisioningService.verifyCurrentPassword(username, oldPassword);
+    if (!valid)
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Map.of("error", "Current password is incorrect"));
+
+    try {
+        keycloakProvisioningService.changeUserPassword(email, newPassword);
+        return ResponseEntity.ok(Map.of("message", "Password changed successfully"));
+    } catch (Exception e) {
+        return ResponseEntity.internalServerError()
+                .body(Map.of("error", "Failed to change password: " + e.getMessage()));
+    }
+}
 
     @PostMapping("/pending/{id}/reject")
     @Operation(summary = "Reject a pending registration")

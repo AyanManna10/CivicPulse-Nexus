@@ -19,7 +19,7 @@ public class CertificatePdfGenerator {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd MMMM yyyy");
 
-    public byte[] generate(Certificate cert) throws IOException {
+    private byte[] generate_internal(Certificate cert) throws IOException {
         try (PDDocument doc = new PDDocument()) {
             PDPage page = new PDPage(PDRectangle.A4);
             doc.addPage(page);
@@ -129,5 +129,33 @@ public class CertificatePdfGenerator {
 
     private String nullSafe(String s) {
         return (s == null || s.isBlank()) ? "-" : s;
+    }
+    /**
+     * Saves the PDF to disk at the standard path and returns the bytes.
+     * Called by CertificateServiceImpl.generate() — writes file for later download.
+     */
+    public void generate(Certificate cert) throws IOException {
+        byte[] bytes = generateBytes(cert);
+        // store to disk so downloadPdf can serve it later
+        java.nio.file.Path dir = java.nio.file.Paths.get(System.getProperty("user.home"), "civicpulse-certs");
+        java.nio.file.Files.createDirectories(dir);
+        java.nio.file.Files.write(dir.resolve("cert-" + cert.getId() + ".pdf"), bytes);
+    }
+
+    public byte[] getPdfBytes(Certificate cert) throws IOException {
+        java.nio.file.Path path = java.nio.file.Paths.get(
+                System.getProperty("user.home"), "civicpulse-certs", "cert-" + cert.getId() + ".pdf");
+        if (java.nio.file.Files.exists(path)) {
+            return java.nio.file.Files.readAllBytes(path);
+        }
+        // If file not on disk, regenerate on the fly
+        return generateBytes(cert);
+    }
+
+    /**
+     * Core PDF generation — returns bytes without writing to disk.
+     */
+    public byte[] generateBytes(Certificate cert) throws IOException {
+        return generate_internal(cert);
     }
 }

@@ -1,39 +1,72 @@
-import { useState, useEffect, useCallback } from "react";
+import VolunteerActivismIcon from "@mui/icons-material/VolunteerActivism";
+import GroupsIcon from "@mui/icons-material/Groups";
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
+import WelfareSchemes from "./components/admin/WelfareSchemes";
+import BeneficiaryManagement from "./components/admin/BeneficiaryManagement";
+import FundDisbursement from "./components/admin/FundDisbursement";
+import { useState, useEffect, useCallback, useRef } from "react";
 import CitizenRegistration from "./components/CitizenRegistration";
+import CitizenDashboard from "./components/citizen/CitizenDashboard";
 import {
-  Typography, Alert, Button, Box, Chip, Divider,
+  Typography, Alert, Button, Box, Chip, Divider, Grid, Paper,
   LinearProgress, Tooltip, Avatar, Badge
 } from "@mui/material";
 
 // MUI Icons
-import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
-import LogoutIcon from "@mui/icons-material/Logout";
-import DashboardIcon from "@mui/icons-material/Dashboard";
-import DescriptionIcon from "@mui/icons-material/Description";
-import ReportProblemIcon from "@mui/icons-material/ReportProblem";
-import PersonAddIcon from "@mui/icons-material/PersonAdd";
-import AddCommentIcon from "@mui/icons-material/AddComment";
-import ArticleIcon from "@mui/icons-material/Article";
-import BarChartIcon from "@mui/icons-material/BarChart";
-import FolderOpenIcon from "@mui/icons-material/FolderOpen";
-import HowToRegIcon from "@mui/icons-material/HowToReg";
-import GroupIcon from "@mui/icons-material/Group";
-import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
-import TrackChangesIcon from "@mui/icons-material/TrackChanges";
+import AccountBalanceIcon     from "@mui/icons-material/AccountBalance";
+import LogoutIcon             from "@mui/icons-material/Logout";
+import DashboardIcon          from "@mui/icons-material/Dashboard";
+import DescriptionIcon        from "@mui/icons-material/Description";
+import ReportProblemIcon      from "@mui/icons-material/ReportProblem";
+import PersonAddIcon          from "@mui/icons-material/PersonAdd";
+import AddCommentIcon         from "@mui/icons-material/AddComment";
+import ArticleIcon            from "@mui/icons-material/Article";
+import BarChartIcon           from "@mui/icons-material/BarChart";
+import FolderOpenIcon         from "@mui/icons-material/FolderOpen";
+import HowToRegIcon           from "@mui/icons-material/HowToReg";
+import GroupIcon              from "@mui/icons-material/Group";
+import NotificationsNoneIcon  from "@mui/icons-material/NotificationsNone";
+import TrackChangesIcon       from "@mui/icons-material/TrackChangesOutlined";
+import AccountCircleIcon      from "@mui/icons-material/AccountCircle";
+import SupervisorAccountIcon  from "@mui/icons-material/SupervisorAccount";
+import AssignmentIcon         from "@mui/icons-material/Assignment";
 
-import type { Grievance, DepartmentInfo, Certificate, CertificateStatus, CertificateType, CitizenProfile } from "./types";
-import { loginWithPassword, clearSession, hasSession, setSessionExpiredHandler, api, hasAnyRole, getUsername, getUserEmail } from "./api";
+import type {
+  Grievance, DepartmentInfo, Certificate, CertificateStatus, CertificateType, CitizenProfile
+} from "./types";
+import {
+  loginWithPassword, clearSession, hasSession, setSessionExpiredHandler,
+  api, hasAnyRole, getUsername, getUserEmail
+} from "./api";
 
-import LoginForm from "./components/LoginForm";
-import Dashboard from "./components/Dashboard";
-import CitizenForm from "./components/CitizenForm";
-import GrievanceForm from "./components/GrievanceForm";
-import GrievanceList from "./components/GrievanceList";
-import CitizenApplyForm from "./components/citizen/CitizenApplyForm";
-import CitizenApplications from "./components/citizen/CitizenApplications";
-import CitizenGrievanceList from "./components/citizen/CitizenGrievanceList";
+import LoginForm              from "./components/LoginForm";
+import Dashboard              from "./components/Dashboard";
+import GrievanceForm          from "./components/GrievanceForm";
+import GrievanceList          from "./components/GrievanceList";
+import CitizenApplyForm       from "./components/citizen/CitizenApplyForm";
+import CitizenApplications    from "./components/citizen/CitizenApplications";
+import CitizenGrievanceList   from "./components/citizen/CitizenGrievanceList";
 import OfficerApplicationList from "./components/officer/OfficerApplicationList";
-import OfficerManagement from "./components/admin/OfficerManagement";
+import OfficerManagement      from "./components/admin/OfficerManagement";
+import DeptOfficerManagement  from "./components/officer/DeptOfficerManagement";
+import ProfileTab             from "./components/ProfileTab";
+import RegisterCitizenPage    from "./components/admin/RegisterCitizenPage";
+import ReportsPage            from "./components/admin/ReportsPage";
+import CitizenApplyScheme from "./components/citizen/CitizenApplyScheme";
+import WelfareApplicationReview from "./components/officer/WelfareApplicationReview";
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface OfficerProfile {
+  id: number;
+  officerCode: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  department: string;
+  headOfficer: boolean;
+  status: string;
+  keycloakRole: string;
+}
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
 
@@ -43,46 +76,79 @@ interface NavItem {
   icon: React.ReactNode;
   roles: ("CITIZEN" | "OFFICER" | "ADMIN")[];
   section?: string;
+  /** If true, only visible to officers who are department heads */
+  headOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  // ── Officer / Admin ────────────────────────────────────────
-  { id: "dashboard",        label: "Dashboard",            icon: <DashboardIcon fontSize="small" />,    roles: ["OFFICER", "ADMIN"] },
-  { id: "applications",     label: "Applications",         icon: <DescriptionIcon fontSize="small" />,  roles: ["OFFICER", "ADMIN"], section: "Certificates & Permits" },
-  { id: "grievances",       label: "Grievances",           icon: <ReportProblemIcon fontSize="small" />, roles: ["OFFICER", "ADMIN"], section: "Certificates & Permits" },
-  { id: "register-citizen", label: "Register Citizen",     icon: <HowToRegIcon fontSize="small" />,     roles: ["OFFICER", "ADMIN"], section: "Management" },
-  { id: "file-grievance",   label: "File Grievance",       icon: <AddCommentIcon fontSize="small" />,   roles: ["OFFICER", "ADMIN"], section: "Management" },
-  // Admin only
-  { id: "officer-mgmt",     label: "Manage Officers And Citizens",      icon: <GroupIcon fontSize="small" />,        roles: ["ADMIN"], section: "Administration" },
-  { id: "reports",          label: "Reports & Analytics",  icon: <BarChartIcon fontSize="small" />,     roles: ["ADMIN"], section: "Administration" },
+  // ── Officer / Admin ────────────────────────────────────────────────────────
+  { id: "dashboard",        label: "Dashboard",            icon: <DashboardIcon fontSize="small" />,           roles: ["OFFICER", "ADMIN"] },
+  { id: "applications",     label: "Applications",         icon: <DescriptionIcon fontSize="small" />,         roles: ["OFFICER", "ADMIN"], section: "Work" },
+  { id: "grievances",       label: "Grievances",           icon: <ReportProblemIcon fontSize="small" />,       roles: ["OFFICER", "ADMIN"], section: "Work" },
+  { id: "register-citizen", label: "Register Citizen",     icon: <HowToRegIcon fontSize="small" />,            roles: ["OFFICER", "ADMIN"], section: "Work" },
+  { id: "file-grievance",   label: "File Grievance",       icon: <AddCommentIcon fontSize="small" />,          roles: ["OFFICER", "ADMIN"], section: "Work" },
+  // Department head: manage their own department's officers
+  { id: "dept-officers",    label: "My Dept Officers",     icon: <SupervisorAccountIcon fontSize="small" />,   roles: ["OFFICER"], section: "Management", headOnly: true },
+  // Admin-only
+  { id: "officer-mgmt",     label: "Manage Officers",      icon: <GroupIcon fontSize="small" />,               roles: ["ADMIN"], section: "Administration" },
+  { id: "reports",          label: "Reports & Analytics",  icon: <BarChartIcon fontSize="small" />,            roles: ["ADMIN"], section: "Administration" },
+  { id: "profile",          label: "My Profile",           icon: <AccountCircleIcon fontSize="small" />,       roles: ["OFFICER", "ADMIN"], section: "Account" },
+ 
 
-  // ── Citizen ────────────────────────────────────────────────
-  { id: "my-applications",  label: "My Applications",      icon: <FolderOpenIcon fontSize="small" />,   roles: ["CITIZEN"] },
-  { id: "apply",            label: "Apply for Certificate", icon: <ArticleIcon fontSize="small" />,     roles: ["CITIZEN"] },
-  { id: "my-grievances",   label: "My Grievances",        icon: <ReportProblemIcon fontSize="small" />, roles: ["CITIZEN"] },
-  { id: "track",            label: "Track Application",    icon: <TrackChangesIcon fontSize="small" />, roles: ["CITIZEN"] },
-  { id: "file-grievance",   label: "File Grievance",       icon: <AddCommentIcon fontSize="small" />,   roles: ["CITIZEN"] },
+{ id: "welfare-schemes",   label: "Welfare Schemes",   icon: <VolunteerActivismIcon fontSize="small" />,    roles: ["ADMIN", "OFFICER"] },
+{ id: "beneficiaries",     label: "Beneficiaries",     icon: <GroupsIcon fontSize="small" />,               roles: ["ADMIN", "OFFICER"] },
+{ id: "fund-disbursement", label: "Fund Disbursement", icon: <AccountBalanceWalletIcon fontSize="small" />,  roles: ["ADMIN", "OFFICER"] },
+{ id: "welfare-applications", label: "Welfare Applications", icon: <AssignmentIcon fontSize="small" />,      roles: ["OFFICER"] },
+
+  // ── Citizen ────────────────────────────────────────────────────────────────
+  { id: "citizen-dashboard", label: "Dashboard",            icon: <DashboardIcon fontSize="small" />,          roles: ["CITIZEN"] },
+  { id: "my-applications",  label: "My Applications",       icon: <FolderOpenIcon fontSize="small" />,         roles: ["CITIZEN"] },
+  { id: "apply-scheme", label: "Apply for Scheme",          icon: <VolunteerActivismIcon fontSize="small" />,  roles: ["CITIZEN"] },
+  { id: "apply",            label: "Apply for Certificate", icon: <ArticleIcon fontSize="small" />,            roles: ["CITIZEN"] },
+  { id: "my-grievances",    label: "My Grievances",         icon: <ReportProblemIcon fontSize="small" />,      roles: ["CITIZEN"] },
+  { id: "profile",          label: "My Profile",            icon: <AccountCircleIcon fontSize="small" />,      roles: ["CITIZEN"] },
+ 
 ];
 
-function getRoleConfig(roles: string[]) {
-  if (roles.includes("ADMIN"))   return { label: "Administrator",   color: "#C62828", bg: "#FFEBEE", role: "ADMIN"   as const };
-  if (roles.includes("OFFICER")) return { label: "Dept. Officer",   color: "#E65100", bg: "#FFF3E0", role: "OFFICER" as const };
-  return                                { label: "Citizen",         color: "#1565C0", bg: "#E3F2FD", role: "CITIZEN" as const };
+function getRoleConfig(roles: string[], officerProfile?: OfficerProfile | null) {
+  if (roles.includes("ADMIN"))   return { label: "Administrator",             color: "#C62828", bg: "#FFEBEE", role: "ADMIN"   as const };
+  if (roles.includes("OFFICER")) return {
+    label: officerProfile?.headOfficer ? "Dept. Head" : "Dept. Officer",
+    color: "#383533", bg: "#FFF3E0", role: "OFFICER" as const
+  };
+  return                                { label: "Citizen",                    color: "#1565C0", bg: "#E3F2FD", role: "CITIZEN" as const };
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-function Sidebar({ tab, onTabChange, roleConfig, username, overdueCount, onLogout }: {
+function Sidebar({
+  tab, onTabChange, roleConfig, username, overdueCount, pendingCount,
+  officerProfile, onLogout,
+}: {
   tab: string;
   onTabChange: (t: string) => void;
   roleConfig: ReturnType<typeof getRoleConfig>;
   username: string;
   overdueCount: number;
+  pendingCount: number;
+  officerProfile: OfficerProfile | null;
   onLogout: () => void;
 }) {
-  const visibleItems = NAV_ITEMS.filter((n) => n.roles.includes(roleConfig.role));
-  const sections     = ["", "Certificates & Permits", "Management", "Administration"] as const;
+  
+  const isHeadOfficer = officerProfile?.headOfficer === true;
 
+  const visibleItems = NAV_ITEMS.filter((n) => {
+    if (!n.roles.includes(roleConfig.role)) return false;
+    if (n.headOnly && !isHeadOfficer) return false;
+    // Welfare tabs: only ADMIN or Revenue Department officers
+    const isWelfareTab = ["welfare-schemes", "beneficiaries", "fund-disbursement"].includes(n.id);
+    if (isWelfareTab && !hasAnyRole("ADMIN")) {
+      if (officerProfile?.department !== "Revenue Department") return false;
+    }
+    return true;
+  });
+
+  const sections = ["", "Work", "Management", "Administration", "Account"] as const;
   const grouped = sections
     .map((section) => ({
       section,
@@ -91,18 +157,41 @@ function Sidebar({ tab, onTabChange, roleConfig, username, overdueCount, onLogou
     .filter((g) => g.items.length > 0);
 
   return (
-    <Box sx={{ width: 238, minHeight: "100vh", bgcolor: "#0F2557", display: "flex", flexDirection: "column", flexShrink: 0, position: "sticky", top: 0, height: "100vh", overflowY: "auto" }}>
+    <Box sx={{
+      width: 238, minHeight: "100vh", bgcolor: "#0F2557",
+      display: "flex", flexDirection: "column", flexShrink: 0,
+      position: "sticky", top: 0, height: "100vh", overflowY: "auto",
+    }}>
       {/* Logo */}
       <Box sx={{ px: 2.5, py: 2.5, borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 0.5 }}>
-          <Box sx={{ width: 34, height: 34, borderRadius: 2, background: "linear-gradient(135deg, #1565C0, #42A5F5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Box sx={{
+            width: 34, height: 34, borderRadius: 2,
+            background: "linear-gradient(135deg, #1565C0, #42A5F5)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
             <AccountBalanceIcon sx={{ color: "#fff", fontSize: 18 }} />
           </Box>
           <Box>
-            <Typography sx={{ color: "#fff", fontWeight: 800, fontSize: "0.95rem", lineHeight: 1.1 }}>CivicPulse</Typography>
-            <Typography sx={{ color: "rgba(255,255,255,0.5)", fontSize: "0.68rem" }}>Nexus Portal</Typography>
+            <Typography sx={{ color: "#fff", fontWeight: 800, fontSize: "0.95rem", lineHeight: 1.1 }}>
+              CivicPulse
+            </Typography>
+            <Typography sx={{ color: "rgba(255,255,255,0.5)", fontSize: "0.68rem" }}>
+              Nexus Portal
+            </Typography>
           </Box>
         </Box>
+        {/* Department badge for officers */}
+        {officerProfile?.department && (
+          <Box sx={{
+            mt: 1, px: 1, py: 0.4, borderRadius: 1,
+            bgcolor: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)",
+          }}>
+            <Typography sx={{ color: "rgba(255,255,255,0.55)", fontSize: "0.62rem", fontWeight: 600 }}>
+              {officerProfile.department}
+            </Typography>
+          </Box>
+        )}
       </Box>
 
       {/* Nav */}
@@ -110,23 +199,44 @@ function Sidebar({ tab, onTabChange, roleConfig, username, overdueCount, onLogou
         {grouped.map(({ section, items }) => (
           <Box key={section || "_"} sx={{ mb: 2 }}>
             {section && (
-              <Typography sx={{ color: "rgba(255,255,255,0.35)", fontSize: "0.65rem", fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", px: 1.5, mb: 0.5 }}>
+              <Typography sx={{
+                color: "rgba(255,255,255,0.35)", fontSize: "0.65rem", fontWeight: 700,
+                letterSpacing: 1.2, textTransform: "uppercase", px: 1.5, mb: 0.5,
+              }}>
                 {section}
               </Typography>
             )}
+            
             {items.map((item) => {
-              const isActive   = tab === item.id;
-              const showBadge  = item.id === "grievances" && overdueCount > 0;
+              const isActive  = tab === item.id;
+              const showBadge = (item.id === "grievances" && overdueCount > 0) ||
+                               (item.id === "register-citizen" && pendingCount > 0);
+              const badgeCount = item.id === "grievances" ? overdueCount : pendingCount;
               return (
-                <Box key={`${item.id}-${item.roles.join("")}`} onClick={() => onTabChange(item.id)} sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 1.5, py: 1, mb: 0.5, borderRadius: 2, cursor: "pointer", bgcolor: isActive ? "rgba(255,255,255,0.15)" : "transparent", borderLeft: isActive ? "3px solid #42A5F5" : "3px solid transparent", "&:hover": { bgcolor: "rgba(255,255,255,0.08)" }, transition: "all 0.15s" }}>
+                <Box
+                  key={`${item.id}-${item.roles.join("")}`}
+                  onClick={() => onTabChange(item.id)}
+                  sx={{
+                    display: "flex", alignItems: "center", gap: 1.5,
+                    px: 1.5, py: 1, mb: 0.5, borderRadius: 2, cursor: "pointer",
+                    bgcolor: isActive ? "rgba(255,255,255,0.15)" : "transparent",
+                    borderLeft: isActive ? "3px solid #42A5F5" : "3px solid transparent",
+                    "&:hover": { bgcolor: "rgba(255,255,255,0.08)" },
+                    transition: "all 0.15s",
+                  }}
+                >
                   <Box sx={{ color: isActive ? "#42A5F5" : "rgba(255,255,255,0.55)", display: "flex" }}>
                     {showBadge ? (
-                      <Badge badgeContent={overdueCount} color="error" sx={{ "& .MuiBadge-badge": { fontSize: "0.6rem", minWidth: 14, height: 14 } }}>
+                      <Badge badgeContent={badgeCount} color="error"
+                        sx={{ "& .MuiBadge-badge": { fontSize: "0.6rem", minWidth: 14, height: 14 } }}>
                         {item.icon}
                       </Badge>
                     ) : item.icon}
                   </Box>
-                  <Typography sx={{ color: isActive ? "#fff" : "rgba(255,255,255,0.7)", fontSize: "0.85rem", fontWeight: isActive ? 700 : 400 }}>
+                  <Typography sx={{
+                    color: isActive ? "#fff" : "rgba(255,255,255,0.7)",
+                    fontSize: "0.85rem", fontWeight: isActive ? 700 : 400,
+                  }}>
                     {item.label}
                   </Typography>
                 </Box>
@@ -139,20 +249,34 @@ function Sidebar({ tab, onTabChange, roleConfig, username, overdueCount, onLogou
       {/* User footer */}
       <Box sx={{ px: 2, py: 2, borderTop: "1px solid rgba(255,255,255,0.1)" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.5 }}>
-          <Avatar sx={{ width: 32, height: 32, bgcolor: roleConfig.color, fontSize: "0.8rem", fontWeight: 700 }}>
+          <Avatar sx={{
+            width: 32, height: 32, bgcolor: roleConfig.color,
+            fontSize: "0.8rem", fontWeight: 700,
+          }}>
             {username.slice(0, 1).toUpperCase()}
           </Avatar>
           <Box sx={{ overflow: "hidden" }}>
-            <Typography sx={{ color: "#fff", fontSize: "0.82rem", fontWeight: 600, lineHeight: 1, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+            <Typography sx={{
+              color: "#fff", fontSize: "0.82rem", fontWeight: 600, lineHeight: 1,
+              textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap",
+            }}>
               {username}
             </Typography>
-            <Box sx={{ display: "inline-flex", mt: 0.5, px: 1, py: 0.25, borderRadius: 1, bgcolor: roleConfig.bg }}>
-              <Typography sx={{ color: roleConfig.color, fontSize: "0.64rem", fontWeight: 700 }}>{roleConfig.label}</Typography>
+            <Box sx={{
+              display: "inline-flex", mt: 0.5, px: 1, py: 0.25,
+              borderRadius: 1, bgcolor: roleConfig.bg,
+            }}>
+              <Typography sx={{ color: roleConfig.color, fontSize: "0.64rem", fontWeight: 700 }}>
+                {roleConfig.label}
+              </Typography>
             </Box>
           </Box>
         </Box>
         <Button fullWidth size="small" startIcon={<LogoutIcon fontSize="small" />} onClick={onLogout}
-          sx={{ color: "rgba(255,255,255,0.6)", justifyContent: "flex-start", "&:hover": { color: "#fff", bgcolor: "rgba(255,255,255,0.08)" } }}>
+          sx={{
+            color: "rgba(255,255,255,0.6)", justifyContent: "flex-start",
+            "&:hover": { color: "#fff", bgcolor: "rgba(255,255,255,0.08)" },
+          }}>
           Sign Out
         </Button>
       </Box>
@@ -162,23 +286,46 @@ function Sidebar({ tab, onTabChange, roleConfig, username, overdueCount, onLogou
 
 // ─── Topbar ───────────────────────────────────────────────────────────────────
 
-function TopBar({ pageTitle, pageSubtitle, loading, overdueCount }: {
-  pageTitle: string; pageSubtitle?: string; loading: boolean; overdueCount: number;
+function TopBar({
+  pageTitle, pageSubtitle, loading, overdueCount, pendingCount, deptLabel,
+}: {
+  pageTitle: string; pageSubtitle?: string; loading: boolean;
+  overdueCount: number; pendingCount: number; deptLabel?: string;
 }) {
   return (
-    <Box sx={{ bgcolor: "#fff", borderBottom: "1px solid #E4E8F0", px: 3, py: 1.5, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 10 }}>
+    <Box sx={{
+      bgcolor: "#fff", borderBottom: "1px solid #E4E8F0", px: 3, py: 1.5,
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      position: "sticky", top: 0, zIndex: 10,
+    }}>
       <Box>
-        <Typography variant="h6" sx={{ fontWeight: 700, color: "#0F2557", lineHeight: 1 }}>{pageTitle}</Typography>
-        {pageSubtitle && <Typography variant="caption" color="text.secondary">{pageSubtitle}</Typography>}
+        <Typography variant="h6" sx={{ fontWeight: 700, color: "#0F2557", lineHeight: 1 }}>
+          {pageTitle}
+        </Typography>
+        {pageSubtitle && (
+          <Typography variant="caption" color="text.secondary">{pageSubtitle}</Typography>
+        )}
       </Box>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-        <Tooltip title={overdueCount > 0 ? `${overdueCount} SLA breach(es)` : "No alerts"}>
-          <Badge badgeContent={overdueCount} color="error">
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+        {deptLabel && (
+          <Chip
+            size="small"
+            label={deptLabel}
+            sx={{ fontSize: "0.68rem", bgcolor: "#E8EDFB", color: "#1A3A8F", fontWeight: 600 }}
+          />
+        )}
+        <Tooltip title={[
+          overdueCount > 0 ? `${overdueCount} SLA breach(es)` : "",
+          pendingCount > 0 ? `${pendingCount} pending item(s)` : "",
+        ].filter(Boolean).join(" · ") || "No alerts"}>
+          <Badge badgeContent={overdueCount + pendingCount} color="error">
             <NotificationsNoneIcon sx={{ color: "#5A6072", cursor: "pointer" }} />
           </Badge>
         </Tooltip>
         <Box sx={{ ml: 1, px: 1.5, py: 0.5, bgcolor: "#F0F2F8", borderRadius: 1.5, border: "1px solid #E4E8F0" }}>
-          <Typography variant="caption" sx={{ color: "#0F2557", fontWeight: 600, fontSize: "0.7rem" }}>GOI · Municipal Services</Typography>
+          <Typography variant="caption" sx={{ color: "#0F2557", fontWeight: 600, fontSize: "0.7rem" }}>
+            GOI · Municipal Services
+          </Typography>
         </Box>
       </Box>
       {loading && <LinearProgress sx={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 2 }} />}
@@ -189,73 +336,27 @@ function TopBar({ pageTitle, pageSubtitle, loading, overdueCount }: {
 // ─── Page meta ────────────────────────────────────────────────────────────────
 
 const PAGE_META: Record<string, { title: string; subtitle?: string }> = {
-  "dashboard":        { title: "Dashboard",                    subtitle: "Overview of grievances and SLA compliance" },
-  "applications":     { title: "Certificate & Permit Applications", subtitle: "Review, verify and approve citizen applications" },
-  "grievances":       { title: "Grievance Management",         subtitle: "Assign, resolve and escalate citizen complaints" },
-  "register-citizen": { title: "Register Citizen",             subtitle: "Enrol a new citizen in the portal" },
-  "file-grievance":   { title: "File a Grievance",             subtitle: "Lodge a complaint on behalf of a citizen" },
-  "officer-mgmt":     { title: "Officer Management",           subtitle: "Add officers, assign departments, set department heads" },
-  "reports":          { title: "Reports & Analytics",          subtitle: "System-wide statistics and performance metrics" },
-  "my-applications":  { title: "My Applications",              subtitle: "Track your certificate and permit applications" },
-  "apply":            { title: "Apply for Certificate / Permit", subtitle: "Submit a new application" },
-  "my-grievances":    { title: "My Grievances",                subtitle: "Track grievances you have filed" },
-  "track":            { title: "Track Application",            subtitle: "Check the current status of a specific application" },
+  "dashboard":        { title: "Dashboard",                        subtitle: "Overview of grievances and SLA compliance" },
+  "applications":     { title: "Certificate & Permit Applications", subtitle: "Review, verify and approve citizen applications for your department" },
+  "grievances":       { title: "Grievance Management",             subtitle: "Assign, resolve and escalate citizen complaints" },
+  "register-citizen": { title: "Register Citizen",                  subtitle: "Directly register a citizen or review self-submitted applications" },
+  "profile":          { title: "My Profile",                        subtitle: "View your details and manage account settings" },
+  "file-grievance":   { title: "File a Grievance",                  subtitle: "Lodge a complaint on behalf of a citizen" },
+  "officer-mgmt":     { title: "Officer Management",                subtitle: "Add officers, assign departments, set department heads" },
+  "dept-officers":    { title: "My Department Officers",            subtitle: "Manage officers in your department — edit details, activate/deactivate" },
+  "reports":          { title: "Reports & Analytics",               subtitle: "System-wide statistics and performance metrics" },
+  "my-applications":  { title: "My Applications",                   subtitle: "Track your certificate and permit applications" },
+  "apply":            { title: "Apply for Certificate / Permit",    subtitle: "Submit a new application" },
+  "my-grievances":    { title: "My Grievances",                     subtitle: "Track grievances you have filed" },
+  "track":            { title: "Track Application",                  subtitle: "Check the current status of a specific application" },
 };
 
-// ─── Reports view ─────────────────────────────────────────────────────────────
-
-function ReportsView({ certStats }: { certStats: Record<string, number> }) {
-  const rows = [
-    { label: "Total Applications",    value: certStats.total           ?? 0, color: "#1A3A8F" },
-    { label: "Submitted",             value: certStats.submitted        ?? 0, color: "#5A6072" },
-    { label: "Under Verification",    value: certStats.underVerification ?? 0, color: "#E65100" },
-    { label: "Verified",              value: certStats.verified         ?? 0, color: "#1565C0" },
-    { label: "Approved",              value: certStats.approved         ?? 0, color: "#2E7D32" },
-    { label: "Rejected",              value: certStats.rejected         ?? 0, color: "#C62828" },
-    { label: "Certificates / Permits Issued", value: certStats.generated ?? 0, color: "#00897B" },
-    { label: "Downloaded",            value: certStats.downloaded       ?? 0, color: "#6A1B9A" },
-  ];
-  const max = Math.max(...rows.map((r) => r.value), 1);
-
-  return (
-    <Box>
-      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 2, mb: 3 }}>
-        {[
-          { label: "Total",    value: certStats.total    ?? 0, color: "#1A3A8F", bg: "#E8EDFB" },
-          { label: "Approved", value: certStats.approved ?? 0, color: "#2E7D32", bg: "#E8F5E9" },
-          { label: "Rejected", value: certStats.rejected ?? 0, color: "#C62828", bg: "#FFEBEE" },
-          { label: "Issued",   value: certStats.generated ?? 0, color: "#00897B", bg: "#E0F2F1" },
-        ].map(({ label, value, color, bg }) => (
-          <Box key={label} sx={{ p: 2.5, bgcolor: "#fff", borderRadius: 2, border: "1px solid #E4E8F0", borderLeft: `4px solid ${color}` }}>
-            <Typography variant="h4" sx={{ fontWeight: 800, color }}>{value}</Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</Typography>
-          </Box>
-        ))}
-      </Box>
-      <Box sx={{ bgcolor: "#fff", borderRadius: 2, p: 3, border: "1px solid #E4E8F0" }}>
-        <Typography variant="subtitle1" sx={{ mb: 2.5, color: "#0F2557", fontWeight: 700 }}>Certificate & Permit Pipeline</Typography>
-        {rows.map(({ label, value, color }) => (
-          <Box key={label} sx={{ mb: 1.5 }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
-              <Typography variant="caption" sx={{ fontWeight: 600, color: "#5A6072" }}>{label}</Typography>
-              <Typography variant="caption" sx={{ fontWeight: 700, color }}>{value}</Typography>
-            </Box>
-            <Box sx={{ height: 6, bgcolor: "#F0F2F8", borderRadius: 3 }}>
-              <Box sx={{ height: 6, bgcolor: color, borderRadius: 3, width: `${Math.round((value / max) * 100)}%`, transition: "width 0.6s ease" }} />
-            </Box>
-          </Box>
-        ))}
-      </Box>
-    </Box>
-  );
-}
-
-// ─── Track Application view (citizen) ─────────────────────────────────────────
+// ─── Track Application (citizen) ──────────────────────────────────────────────
 
 function TrackApplication({ citizenId }: { citizenId: number | null }) {
-  const [appNo, setAppNo]   = useState("");
-  const [result, setResult] = useState<any>(null);
-  const [err, setErr]       = useState("");
+  const [appNo, setAppNo]     = useState("");
+  const [result, setResult]   = useState<any>(null);
+  const [err, setErr]         = useState("");
   const [loading, setLoading] = useState(false);
 
   const search = async () => {
@@ -263,7 +364,6 @@ function TrackApplication({ citizenId }: { citizenId: number | null }) {
     if (!appNo.trim()) { setErr("Enter an application number"); return; }
     setLoading(true);
     try {
-      // Search by citizenId and find matching applicationNumber
       if (!citizenId) { setErr("Citizen profile not resolved — please re-login"); return; }
       const res = await api.get(`/api/certificates/citizen/${citizenId}`);
       const found = (res.data as any[]).find(
@@ -276,34 +376,45 @@ function TrackApplication({ citizenId }: { citizenId: number | null }) {
   };
 
   const STATUS_META: Record<string, { color: string; label: string }> = {
-    SUBMITTED:            { color: "#5A6072", label: "Submitted — awaiting officer review" },
-    UNDER_VERIFICATION:   { color: "#E65100", label: "Under Verification" },
-    VERIFIED:             { color: "#1565C0", label: "Documents Verified" },
-    APPROVED:             { color: "#2E7D32", label: "Approved — certificate being prepared" },
-    REJECTED:             { color: "#C62828", label: "Rejected" },
-    CERTIFICATE_GENERATED:{ color: "#00897B", label: "Certificate / Permit Issued — ready to download" },
-    DOWNLOADED:           { color: "#6A1B9A", label: "Downloaded" },
+    SUBMITTED:             { color: "#5A6072", label: "Submitted — awaiting officer review" },
+    UNDER_VERIFICATION:    { color: "#E65100", label: "Under Verification" },
+    VERIFIED:              { color: "#1565C0", label: "Documents Verified" },
+    APPROVED:              { color: "#2E7D32", label: "Approved — certificate being prepared" },
+    REJECTED:              { color: "#C62828", label: "Rejected" },
+    CERTIFICATE_GENERATED: { color: "#00897B", label: "Certificate / Permit Issued — ready to download" },
+    DOWNLOADED:            { color: "#6A1B9A", label: "Downloaded" },
   };
 
   return (
     <Box sx={{ maxWidth: 600 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2.5 }}>
-        <Box sx={{ width: 44, height: 44, borderRadius: 2.5, background: "linear-gradient(135deg, #0F2557, #1A3A8F)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+        <Box sx={{
+          width: 44, height: 44, borderRadius: 2.5,
+          background: "linear-gradient(135deg, #0F2557, #1A3A8F)",
+          display: "flex", alignItems: "center", justifyContent: "center", color: "#fff",
+        }}>
           <TrackChangesIcon />
         </Box>
         <Box>
-          <Typography variant="h6" sx={{ fontWeight: 700, color: "#0F2557", lineHeight: 1.1 }}>Track Application</Typography>
-          <Typography variant="caption" color="text.secondary">Enter your application number to see the current status</Typography>
+          <Typography variant="h6" sx={{ fontWeight: 700, color: "#0F2557", lineHeight: 1.1 }}>
+            Track Application
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Enter your application number to see the current status
+          </Typography>
         </Box>
       </Box>
 
       <Box sx={{ display: "flex", gap: 1.5, mb: 2 }}>
         <input
-          value={appNo}
-          onChange={(e) => setAppNo(e.target.value)}
+          value={appNo} onChange={(e) => setAppNo(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && search()}
           placeholder="e.g. APP-2026-000001"
-          style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid #CBD2E0", fontSize: "0.9rem", fontFamily: "inherit", outline: "none", color: "#1A1F36" }}
+          style={{
+            flex: 1, padding: "10px 14px", borderRadius: 8,
+            border: "1px solid #CBD2E0", fontSize: "0.9rem",
+            fontFamily: "inherit", outline: "none", color: "#1A1F36",
+          }}
         />
         <Button variant="contained" onClick={search} disabled={loading}>
           {loading ? "Searching..." : "Track"}
@@ -325,20 +436,27 @@ function TrackApplication({ citizenId }: { citizenId: number | null }) {
                   </Typography>
                   <Typography variant="h6" sx={{ fontWeight: 700, mt: 0.25 }}>{result.citizenName}</Typography>
                 </Box>
-                <Chip label={meta.label} size="small" sx={{ bgcolor: `${meta.color}15`, color: meta.color, fontWeight: 700, fontSize: "0.72rem" }} />
+                <Chip label={meta.label} size="small"
+                  sx={{ bgcolor: `${meta.color}15`, color: meta.color, fontWeight: 700, fontSize: "0.72rem" }} />
               </Box>
               <Divider sx={{ mb: 2 }} />
               <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
                 {[
-                  { label: "Certificate Type", value: result.certificateType?.replace(/_/g, " ") },
-                  { label: "Applied On",        value: new Date(result.appliedAt).toLocaleDateString("en-IN") },
-                  ...(result.verifiedBy   ? [{ label: "Verified By",  value: result.verifiedBy }]   : []),
-                  ...(result.decidedBy    ? [{ label: "Decided By",   value: result.decidedBy }]    : []),
+                  { label: "Certificate Type",  value: result.certificateType?.replace(/_/g, " ") },
+                  { label: "Applied On",         value: new Date(result.appliedAt).toLocaleDateString("en-IN") },
+                  { label: "Routed To",          value: result.assignedDepartment ?? "—" },
+                  ...(result.verifiedBy        ? [{ label: "Verified By",     value: result.verifiedBy }]     : []),
+                  ...(result.decidedBy         ? [{ label: "Decided By",      value: result.decidedBy }]      : []),
                   ...(result.certificateNumber ? [{ label: "Certificate No.", value: result.certificateNumber }] : []),
-                  ...(result.rejectionReason   ? [{ label: "Rejection Reason", value: result.rejectionReason }]   : []),
+                  ...(result.rejectionReason   ? [{ label: "Rejection Reason",value: result.rejectionReason }]   : []),
                 ].map(({ label, value }) => (
                   <Box key={label}>
-                    <Typography variant="caption" sx={{ color: "#9AA3B5", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, fontSize: "0.65rem", display: "block" }}>{label}</Typography>
+                    <Typography variant="caption" sx={{
+                      color: "#9AA3B5", fontWeight: 600, textTransform: "uppercase",
+                      letterSpacing: 0.5, fontSize: "0.65rem", display: "block",
+                    }}>
+                      {label}
+                    </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 500 }}>{value}</Typography>
                   </Box>
                 ))}
@@ -361,8 +479,9 @@ export default function App() {
   const [loading, setLoading]     = useState(false);
   const [tab, setTab]             = useState("dashboard");
   const [showRegistration, setShowRegistration] = useState(false);
+  const [citizenAlertCount, setCitizenAlertCount] = useState(0);
 
-  // Shared state
+  // Shared data state
   const [grievances, setGrievances]         = useState<Grievance[]>([]);
   const [myGrievances, setMyGrievances]     = useState<Grievance[]>([]);
   const [dashboard, setDashboard]           = useState<Record<string, any>>({});
@@ -371,19 +490,26 @@ export default function App() {
   const [certificates, setCertificates]     = useState<Certificate[]>([]);
   const [myCertificates, setMyCertificates] = useState<Certificate[]>([]);
   const [certStats, setCertStats]           = useState<Record<string, number>>({});
+  const [pendingCount, setPendingCount]     = useState(0);
 
-  // Citizen profile resolved from JWT email → /api/citizens/me
-  const [citizenProfile, setCitizenProfile] = useState<CitizenProfile | null>(null);
-  // citizenId derived from the resolved profile (null until resolved)
-  const citizenId = citizenProfile?.id ?? null;
-  // shared citizenId string for grievance form (officer side)
+  // Profile states
+  const [citizenProfile, setCitizenProfile]   = useState<CitizenProfile | null>(null);
+  const [officerProfile, setOfficerProfile]   = useState<OfficerProfile | null>(null);
+
+  // Ref so loadAll can always read the latest officerProfile without stale closure
+  const officerProfileRef = useRef<OfficerProfile | null>(null);
+
+  const citizenId        = citizenProfile?.id ?? null;
   const [officerCitizenId, setOfficerCitizenId] = useState("1");
 
   const isAdmin   = hasAnyRole("ADMIN");
   const isOfficer = hasAnyRole("OFFICER");
   const isCitizen = !isAdmin && !isOfficer;
   const currentUsername = getUsername();
-  const roleConfig = getRoleConfig(isAdmin ? ["ADMIN"] : isOfficer ? ["OFFICER"] : []);
+  const roleConfig = getRoleConfig(
+    isAdmin ? ["ADMIN"] : isOfficer ? ["OFFICER"] : [],
+    officerProfile
+  );
 
   useEffect(() => {
     setSessionExpiredHandler(() => {
@@ -392,20 +518,37 @@ export default function App() {
     });
   }, []);
 
-  // Resolve citizen profile from JWT email (citizen users only)
+  // ── Profile resolvers ─────────────────────────────────────────────────────────
+
   const resolveCitizenProfile = useCallback(async () => {
     if (!hasAnyRole("CITIZEN") || hasAnyRole("ADMIN") || hasAnyRole("OFFICER")) return;
-    const email = getUserEmail();
-    if (!email) return;
     try {
       const res = await api.get("/api/citizens/me");
       setCitizenProfile(res.data);
     } catch {
-      // Citizen not yet registered in DB — they can still view the portal
-      // but Apply form will show a warning
       setCitizenProfile(null);
     }
   }, []);
+
+  /**
+   * Resolves the officer's own profile from the DB via /api/officers/me.
+   * Stores it in both state (for UI) and ref (for use inside loadAll callback).
+   * Officers who are NOT yet in the DB (Keycloak-only) will silently fail.
+   */
+  const resolveOfficerProfile = useCallback(async () => {
+    if (!hasAnyRole("OFFICER") || hasAnyRole("ADMIN")) return;
+    try {
+      const res = await api.get("/api/officers/me");
+      setOfficerProfile(res.data);
+      officerProfileRef.current = res.data;
+    } catch {
+      // Officer not yet in DB — they can still use the portal, just no dept scoping
+      setOfficerProfile(null);
+      officerProfileRef.current = null;
+    }
+  }, []);
+
+  // ── Data loaders ──────────────────────────────────────────────────────────────
 
   const loadMyCertificates = useCallback(async (cId: number) => {
     try {
@@ -421,51 +564,117 @@ export default function App() {
     } catch { /* no grievances yet */ }
   }, []);
 
+  /**
+   * Main data loader.
+   *
+   * Scoping rules:
+   * - ADMIN    → loads ALL grievances (/api/grievances) and ALL certs (/api/certificates)
+   * - OFFICER  → loads dept-scoped grievances (/api/grievances/department/{dept})
+   *              and dept-scoped certs (/api/certificates?department={dept})
+   *   * Open/unassigned grievances (dept=null) are NOT returned by the dept endpoint,
+   *     so officers never see other departments' work.  Admins see unassigned ones
+   *     and do the initial dept+officer assignment.
+   * - CITIZEN  → handled separately via citizen profile and citizen-scoped endpoints
+   */
   const loadAll = useCallback(async () => {
     setLoading(true);
-    try {
-      const isAdminOrOfficer = hasAnyRole("ADMIN", "OFFICER");
+
+    // Load pending registration count (officer/admin badge — not for citizens)
+    if (hasAnyRole("ADMIN") || hasAnyRole("OFFICER")) {
       try {
-  if (isAdminOrOfficer) {
-    const officerRes = await api.get("/api/officers");
-    const officerList: any[] = officerRes.data;
+        const pendingRes = await api.get("/api/citizens/pending");
+        setPendingCount(pendingRes.data.length);
+      } catch { /* silent */ }
+    }
 
-    const deptMap: Record<string, string[]> = {};
-    officerList
-      .filter((o) => o.status === "ACTIVE" && o.keycloakRole !== "ADMIN")
-      .forEach((o) => {
-        if (!deptMap[o.department]) deptMap[o.department] = [];
-        deptMap[o.department].push(o.fullName);
-      });
+    try {
+      const isAdminRole   = hasAnyRole("ADMIN");
+      const isOfficerRole = hasAnyRole("OFFICER");
+      const isAdminOrOfficer = isAdminRole || isOfficerRole;
 
-    const built = Object.entries(deptMap).map(([name, officers]) => ({
-      name,
-      officers,
-    }));
-    setDepartments(built);
-  }
-} catch { /* officers endpoint optional */ }
-
+      // Build department → officer map from the full officers list (both roles need this for assignment dropdowns)
       if (isAdminOrOfficer) {
-        const [gRes, dRes, sRes, certRes, statsRes] = await Promise.all([
+        try {
+          const officerRes = await api.get("/api/officers");
+          const officerList: any[] = officerRes.data;
+          const deptMap: Record<string, string[]> = {};
+          officerList
+            .filter((o) => o.status === "ACTIVE" && o.keycloakRole !== "ADMIN")
+            .forEach((o) => {
+              if (!deptMap[o.department]) deptMap[o.department] = [];
+              deptMap[o.department].push(o.fullName);
+            });
+          setDepartments(Object.entries(deptMap).map(([name, officers]) => ({ name, officers })));
+        } catch { /* optional */ }
+      }
+
+      if (isAdminRole) {
+        // ── Admin: full visibility ─────────────────────────────────────────────
+        const [gRes, dRes, certRes, statsRes] = await Promise.all([
           api.get("/api/grievances"),
           api.get("/api/grievances/dashboard"),
-          api.get("/api/grievances/sla"),
           api.get("/api/certificates"),
           api.get("/api/certificates/stats"),
         ]);
-        setGrievances(gRes.data);
+        const allGrievances: Grievance[] = gRes.data;
+        setGrievances(allGrievances);
         setDashboard(dRes.data);
-        setOverdue(sRes.data);
+        setOverdue(allGrievances.filter(g =>
+          g.dueDate && new Date(g.dueDate).getTime() < Date.now() && g.status !== "RESOLVED"
+        ));
         setCertificates(certRes.data);
         setCertStats(statsRes.data);
+
+      } else if (isOfficerRole) {
+        // ── Officer: dept-scoped data ──────────────────────────────────────────
+        const profile = officerProfileRef.current;
+        const dept    = profile?.department;
+
+        if (dept) {
+          const [gRes, dRes, certRes, statsRes] = await Promise.all([
+            api.get(`/api/grievances/department/${encodeURIComponent(dept)}`),
+            api.get("/api/grievances/dashboard"),
+            api.get(`/api/certificates?department=${encodeURIComponent(dept)}`),
+            api.get("/api/certificates/stats"),
+          ]);
+          const deptGrievances: Grievance[] = gRes.data;
+          setGrievances(deptGrievances);
+          setDashboard(dRes.data);
+          setOverdue(deptGrievances.filter(g =>
+            g.dueDate && new Date(g.dueDate).getTime() < Date.now() && g.status !== "RESOLVED"
+          ));
+          setCertificates(certRes.data);
+          setCertStats(statsRes.data);
+        } else {
+          // Officer profile not in DB yet — show empty state with guidance
+          setGrievances([]);
+          setCertificates([]);
+        }
+
       } else {
-        // Citizen: first resolve their profile, then load scoped data
+        // ── Citizen: resolve profile then load citizen-scoped data ─────────────
         await resolveCitizenProfile();
       }
     } catch {
       setError("Failed to load data — check that backend services are running");
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    // Citizen alerts: count open grievances + pending scheme applications
+    if (hasAnyRole("CITIZEN") && citizenId) {
+      try {
+        const [gRes, aRes] = await Promise.all([
+          api.get(`/api/grievances/citizen/${citizenId}`).catch(() => ({ data: [] })),
+          api.get(`/api/welfare/applications/citizen/${citizenId}`).catch(() => ({ data: [] })),
+        ]);
+        const openGrievances = gRes.data.filter((g: any) =>
+          ["SUBMITTED", "ASSIGNED", "IN_PROGRESS"].includes(g.status)
+        ).length;
+        const pendingApps = aRes.data.filter((a: any) => a.status === "PENDING").length;
+        setCitizenAlertCount(openGrievances + pendingApps);
+      } catch { /* silent */ }
+    }
+
+  };  // end of loadAll}
   }, [resolveCitizenProfile]);
 
   // After citizenProfile is set, load citizen-scoped data
@@ -476,25 +685,75 @@ export default function App() {
     }
   }, [citizenProfile, loadMyCertificates, loadMyGrievances]);
 
+  // ── Login / Logout ────────────────────────────────────────────────────────────
+
   const login = async () => {
     setError(""); setLoading(true);
     try {
       await loginWithPassword(username, password);
       setLoggedIn(true);
+
+      // Resolve the appropriate profile BEFORE loadAll so data is correctly scoped
+      if (hasAnyRole("OFFICER") && !hasAnyRole("ADMIN")) {
+        await resolveOfficerProfile();
+      }
+
       await loadAll();
       setTab(hasAnyRole("ADMIN") || hasAnyRole("OFFICER") ? "dashboard" : "my-applications");
     } catch {
       setError("Login failed — check your credentials and that Keycloak is running");
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const logout = () => {
-    clearSession(); setLoggedIn(false);
+    clearSession();
+    setLoggedIn(false);
     setGrievances([]); setMyGrievances([]); setDashboard({});
     setOverdue([]); setDepartments([]); setCertificates([]);
     setMyCertificates([]); setCertStats({}); setCitizenProfile(null);
+    setOfficerProfile(null); officerProfileRef.current = null;
     setError(""); setTab("dashboard");
   };
+  /**
+   * Refresh: re-loads data with the same dept scoping as loadAll.
+   * Called after any create/update action (assign, resolve, verify, etc.)
+   */
+  const refresh = useCallback(async () => {
+    if (!loggedIn) return;
+    const isAdminRole   = hasAnyRole("ADMIN");
+    const isOfficerRole = hasAnyRole("OFFICER");
+
+    try {
+      if (isAdminRole) {
+        const [gRes, certRes] = await Promise.all([
+          api.get("/api/grievances"),
+          api.get("/api/certificates"),
+        ]);
+        const allGrievances: Grievance[] = gRes.data;
+        setGrievances(allGrievances);
+        setOverdue(allGrievances.filter(g =>
+          g.dueDate && new Date(g.dueDate).getTime() < Date.now() && g.status !== "RESOLVED"
+        ));
+        setCertificates(certRes.data);
+      } else if (isOfficerRole) {
+        const dept = officerProfileRef.current?.department;
+        if (dept) {
+          const [gRes, certRes] = await Promise.all([
+            api.get(`/api/grievances/department/${encodeURIComponent(dept)}`),
+            api.get(`/api/certificates?department=${encodeURIComponent(dept)}`),
+          ]);
+          const deptGrievances: Grievance[] = gRes.data;
+          setGrievances(deptGrievances);
+          setOverdue(deptGrievances.filter(g =>
+            g.dueDate && new Date(g.dueDate).getTime() < Date.now() && g.status !== "RESOLVED"
+          ));
+          setCertificates(certRes.data);
+        }
+      }
+    } catch { /* silent — stale data is acceptable on a failed refresh */ }
+  }, [loggedIn]);
 
   const handleSearch = async (name: string, status: CertificateStatus | "", type: CertificateType | "") => {
     setLoading(true);
@@ -503,25 +762,18 @@ export default function App() {
       if (name)   params.append("citizenName", name);
       if (status) params.append("status", status);
       if (type)   params.append("type", type);
+      // For officers, always scope by dept
+      const isOfficerRole = hasAnyRole("OFFICER") && !hasAnyRole("ADMIN");
+      const dept = officerProfileRef.current?.department;
+      if (isOfficerRole && dept) params.append("department", dept);
       const res = await api.get(`/api/certificates/search?${params.toString()}`);
       setCertificates(res.data);
     } catch { setError("Search failed"); }
     finally { setLoading(false); }
   };
 
-  const refresh = async () => {
-  if (!loggedIn) return;
-  try {
-    const [gRes, certRes] = await Promise.all([
-      api.get("/api/grievances"),
-      api.get("/api/certificates"),
-    ]);
-    setGrievances(gRes.data);
-    setCertificates(certRes.data);
-  } catch { /* silent */ }
-};
+  // ── Pre-login screens ─────────────────────────────────────────────────────────
 
-  // ── Pre-login screens ────────────────────────────────────────────────────────
   if (!loggedIn || !hasSession()) {
     if (showRegistration) {
       return (
@@ -547,10 +799,13 @@ export default function App() {
   return (
     <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#F0F2F8" }}>
       <Sidebar
-        tab={tab} onTabChange={setTab}
+        tab={tab}
+        onTabChange={setTab}
         roleConfig={roleConfig}
-        username={currentUsername || username}
+        username={currentUsername}
         overdueCount={overdue.length}
+        pendingCount={pendingCount}
+        officerProfile={officerProfile}
         onLogout={logout}
       />
 
@@ -559,7 +814,13 @@ export default function App() {
           pageTitle={pageMeta.title}
           pageSubtitle={pageMeta.subtitle}
           loading={loading}
-          overdueCount={overdue.length}
+          overdueCount={isCitizen ? 0 : overdue.length}
+          pendingCount={isCitizen ? citizenAlertCount : pendingCount}
+          deptLabel={
+            isOfficer && !isAdmin && officerProfile?.department
+              ? officerProfile.department
+              : undefined
+          }
         />
 
         <Box sx={{ flex: 1, p: 3 }}>
@@ -569,89 +830,204 @@ export default function App() {
             </Alert>
           )}
 
-          {/* ── CITIZEN LAYOUT ─────────────────────────────────── */}
+          {/* ── Officer profile not found warning ──────────────────────────── */}
+          {isOfficer && !isAdmin && !officerProfile && (
+            <Alert severity="warning" sx={{ mb: 2.5, borderRadius: 2 }}>
+              Your officer profile was not found in the system. Contact an administrator to set up
+              your department and ensure your email ({getUserEmail()}) is registered.
+            </Alert>
+          )}
+
+          {/* ── CITIZEN LAYOUT ─────────────────────────────────────────────── */}
           {isCitizen && (
             <>
               {tab === "my-applications" && (
-                <CitizenApplications
-                  applications={myCertificates}
-                  onError={setError}
-                  onLoadingChange={setLoading}
-                  onChanged={() => citizenId && loadMyCertificates(citizenId)}
-                />
+                <Box>
+                  <Box sx={{ mb: 3 }}>
+                    <TrackApplication citizenId={citizenId} />
+                  </Box>
+                  <CitizenApplications
+                    applications={myCertificates}
+                    onError={setError}
+                    onLoadingChange={setLoading}
+                    onChanged={() => citizenId && loadMyCertificates(citizenId)}
+                  />
+                </Box>
               )}
               {tab === "apply" && (
-                <CitizenApplyForm
-                  citizenId={citizenId}
-                  loading={loading}
-                  onError={setError}
-                  onLoadingChange={setLoading}
-                  onSuccess={() => {
-                    setTab("my-applications");
-                    if (citizenId) loadMyCertificates(citizenId);
-                  }}
-                />
+                <Box sx={{ maxWidth: 760, mx: "auto" }}>
+                  <CitizenApplyForm
+                    citizenId={citizenId}
+                    loading={loading}
+                    onError={setError}
+                    onLoadingChange={setLoading}
+                    onSuccess={() => {
+                      setTab("my-applications");
+                      if (citizenId) loadMyCertificates(citizenId);
+                    }}
+                  />
+                </Box>
+              )}
+              {tab === "apply-scheme" && (
+                  <CitizenApplyScheme
+                    citizenId={citizenId}
+                    citizenName={citizenProfile?.fullName ?? ""}
+                    citizenEmail={getUserEmail()}
+                    onError={setError}
+                    onLoadingChange={setLoading}
+                  />
               )}
               {tab === "my-grievances" && (
-                <CitizenGrievanceList grievances={myGrievances} />
-              )}
-              {tab === "track" && (
-                <TrackApplication citizenId={citizenId} />
-              )}
-              {tab === "file-grievance" && (
-                <GrievanceForm
-                  citizenId={citizenId ? String(citizenId) : ""}
-                  loading={loading}
-                  onCitizenIdChange={() => {}}
-                  onError={setError}
-                  onLoadingChange={setLoading}
-                  onGrievanceCreated={() => {
-                    if (citizenId) loadMyGrievances(citizenId);
-                    setTab("my-grievances");
-                  }}
+                <CitizenGrievanceList
+                  grievances={myGrievances}
+                  onFileNew={() => setTab("file-grievance")}
                 />
+              )}
+              
+              {tab === "profile" && isCitizen && (
+                <Box sx={{ maxWidth: 700, mx: "auto" }}>
+                  <ProfileTab
+                    citizenProfile={citizenProfile}
+                    roleLabel={roleConfig.label}
+                    roleColor={roleConfig.color}
+                    roleBg={roleConfig.bg}
+                    onError={setError}
+                    onLoadingChange={setLoading}
+                  />
+                </Box>
+              )}
+              {tab === "citizen-dashboard" && (
+                 <CitizenDashboard
+                   citizenId={citizenId}
+                   citizenName={citizenProfile?.fullName ?? ""}
+                   onError={setError}
+                   onLoadingChange={setLoading}
+                  />
+                )}
+              {tab === "file-grievance" && isCitizen && (
+  <Grid container spacing={3} sx={{ alignItems: "flex-start" }}>
+    <Grid size={{ xs: 12, md: 8 }}>
+      <GrievanceForm
+        citizenId={String(citizenId ?? "")}
+        loading={loading}
+        onCitizenIdChange={() => {}}
+        onError={setError}
+        onLoadingChange={setLoading}
+        onGrievanceCreated={() => {
+          setTab("my-grievances");
+          if (citizenId) loadMyGrievances(citizenId);
+        }}
+        existingGrievances={myGrievances}
+      />
+    </Grid>
+    <Grid size={{ xs: 12, lg: 4 }}>
+                    <Box sx={{ mt: "66px" }}>
+                    <Paper sx={{ border: "1px solid #E4E8F0", overflow: "hidden", mb: 2 }}>
+                      <Box sx={{ background: "linear-gradient(135deg, #0F2557, #1A3A8F)", px: 2.5, py: 1.5 }}>
+                        <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.9)", fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", fontSize: "0.72rem" }}>
+                          How it works
+                        </Typography>
+                      </Box>
+                      <Box sx={{ p: 2 }}>
+                        {[
+                          { step: "1", text: "Enter the citizen's registered portal ID." },
+                          { step: "2", text: "Describe the issue clearly — include location and date." },
+                          { step: "3", text: "Set the priority. HIGH issues are resolved within 1 day." },
+                          { step: "4", text: "Submit — it will appear in Grievances for assignment." },
+                        ].map(({ step, text }) => (
+                          <Box key={step} sx={{ display: "flex", gap: 1, mb: 1.5, "&:last-child": { mb: 0 } }}>
+                            <Box sx={{ width: 20, height: 20, borderRadius: "50%", bgcolor: "#0F2557", color: "#fff", fontSize: "0.65rem", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, mt: 0.1 }}>
+                              {step}
+                            </Box>
+                            <Typography variant="caption" sx={{ color: "#3D4A6B", lineHeight: 1.6 }}>{text}</Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    </Paper>
+
+                    <Paper sx={{ border: "1px solid #E4E8F0", overflow: "hidden" }}>
+                      <Box sx={{ px: 2.5, py: 1.5, bgcolor: "#F0F4FF", borderBottom: "1px solid #E4E8F0" }}>
+                        <Typography variant="caption" sx={{ fontWeight: 700, color: "#1A3A8F", textTransform: "uppercase", letterSpacing: 0.5, fontSize: "0.72rem" }}>
+                          SLA Reference
+                        </Typography>
+                      </Box>
+                      <Box sx={{ p: 2 }}>
+                        {[
+                          { label: "HIGH",   sla: "1 day",  color: "#C62828", bg: "#FFEBEE" },
+                          { label: "MEDIUM", sla: "3 days", color: "#E65100", bg: "#FFF3E0" },
+                          { label: "LOW",    sla: "7 days", color: "#2E7D32", bg: "#E8F5E9" },
+                        ].map(({ label, sla, color, bg }) => (
+                          <Box key={label} sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", p: 1, mb: 0.75, borderRadius: 1.5, bgcolor: bg, "&:last-child": { mb: 0 } }}>
+                            <Typography variant="caption" sx={{ fontWeight: 700, color }}>{label}</Typography>
+                            <Typography variant="caption" sx={{ color, fontWeight: 600 }}>Resolve within {sla}</Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    </Paper>
+                  </Box>
+                  </Grid>
+                </Grid>
               )}
             </>
           )}
 
-          {/* ── OFFICER / ADMIN LAYOUT ─────────────────────────── */}
+          {/* ── OFFICER / ADMIN LAYOUT ─────────────────────────────────────── */}
           {(isOfficer || isAdmin) && (
             <>
               {tab === "dashboard" && (
                 <>
                   <Dashboard dashboard={dashboard} overdue={overdue} />
+
                   {/* Quick actions */}
                   <Box sx={{ mt: 3, bgcolor: "#fff", borderRadius: 2, p: 2.5, border: "1px solid #E4E8F0" }}>
-                    <Typography variant="subtitle2" sx={{ mb: 1.5, color: "#5A6072", textTransform: "uppercase", letterSpacing: 0.5, fontSize: "0.72rem" }}>
+                    <Typography variant="subtitle2" sx={{
+                      mb: 1.5, color: "#5A6072", textTransform: "uppercase",
+                      letterSpacing: 0.5, fontSize: "0.72rem",
+                    }}>
                       Quick Actions
                     </Typography>
                     <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
-                      <Button variant="contained" size="small" startIcon={<DescriptionIcon />} onClick={() => setTab("applications")}>
-                        Review Applications
+                      <Button variant="contained" size="small"
+                        startIcon={<DescriptionIcon />} onClick={() => setTab("applications")}>
+                        {isOfficer && !isAdmin ? "My Dept Applications" : "Review Applications"}
                       </Button>
-                      <Button variant="outlined" size="small" startIcon={<ReportProblemIcon />} onClick={() => setTab("grievances")}>
-                        Manage Grievances
+                      <Button variant="outlined" size="small"
+                        startIcon={<ReportProblemIcon />} onClick={() => setTab("grievances")}>
+                        {isOfficer && !isAdmin ? "My Dept Grievances" : "Manage Grievances"}
                       </Button>
-                      <Button variant="outlined" size="small" startIcon={<PersonAddIcon />} onClick={() => setTab("register-citizen")}>
+                      <Button variant="outlined" size="small"
+                        startIcon={<PersonAddIcon />} onClick={() => setTab("register-citizen")}>
                         Register Citizen
                       </Button>
+                      {officerProfile?.headOfficer && (
+                        <Button variant="outlined" size="small"
+                          startIcon={<SupervisorAccountIcon />} onClick={() => setTab("dept-officers")}>
+                          My Dept Officers
+                        </Button>
+                      )}
                       {isAdmin && (
                         <>
-                          <Button variant="outlined" size="small" startIcon={<GroupIcon />} onClick={() => setTab("officer-mgmt")}>
-                            Manage Officers And Citizens
+                          <Button variant="outlined" size="small"
+                            startIcon={<GroupIcon />} onClick={() => setTab("officer-mgmt")}>
+                            Manage Officers
                           </Button>
-                          <Button variant="outlined" size="small" color="secondary" startIcon={<BarChartIcon />} onClick={() => setTab("reports")}>
+                          <Button variant="outlined" size="small" color="secondary"
+                            startIcon={<BarChartIcon />} onClick={() => setTab("reports")}>
                             View Reports
                           </Button>
                         </>
                       )}
                     </Box>
                   </Box>
-                  {/* Cert pipeline strip — admin only */}
-                  {isAdmin && Object.keys(certStats).length > 0 && (
+
+                  {/* Cert pipeline strip */}
+                  {Object.keys(certStats).length > 0 && (
                     <Box sx={{ mt: 2, bgcolor: "#fff", borderRadius: 2, p: 2.5, border: "1px solid #E4E8F0" }}>
-                      <Typography variant="subtitle2" sx={{ mb: 1.5, color: "#5A6072", textTransform: "uppercase", letterSpacing: 0.5, fontSize: "0.72rem" }}>
-                        Certificate & Permit Pipeline
+                      <Typography variant="subtitle2" sx={{
+                        mb: 1.5, color: "#5A6072", textTransform: "uppercase",
+                        letterSpacing: 0.5, fontSize: "0.72rem",
+                      }}>
+                        {isOfficer && !isAdmin ? "My Department — Certificate Pipeline" : "Certificate & Permit Pipeline"}
                       </Typography>
                       <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
                         {[
@@ -662,8 +1038,13 @@ export default function App() {
                           { key: "rejected",  label: "Rejected", color: "#C62828" },
                           { key: "generated", label: "Issued",   color: "#00897B" },
                         ].map(({ key, label, color }) => (
-                          <Box key={key} sx={{ textAlign: "center", px: 2, py: 1, borderRadius: 2, border: `1px solid ${color}20`, bgcolor: `${color}08` }}>
-                            <Typography variant="h6" sx={{ fontWeight: 800, color }}>{certStats[key] ?? 0}</Typography>
+                          <Box key={key} sx={{
+                            textAlign: "center", px: 2, py: 1, borderRadius: 2,
+                            border: `1px solid ${color}20`, bgcolor: `${color}08`,
+                          }}>
+                            <Typography variant="h6" sx={{ fontWeight: 800, color }}>
+                              {certStats[key] ?? 0}
+                            </Typography>
                             <Typography variant="caption" sx={{ color: "#5A6072" }}>{label}</Typography>
                           </Box>
                         ))}
@@ -682,20 +1063,34 @@ export default function App() {
                   onSearchChange={handleSearch}
                 />
               )}
-
+              {tab === "welfare-applications" && (
+                <WelfareApplicationReview
+                   officerDept={officerProfile?.department}
+                   onError={setError}
+                   onLoadingChange={setLoading}
+                    />
+              )}
               {tab === "grievances" && (
-                <GrievanceList
+                 <GrievanceList
                   grievances={grievances}
                   departments={departments}
                   canManage={true}
-                  onError={setError}
-                  onLoadingChange={setLoading}
-                  onChanged={refresh}
-                />
-              )}
+                  userRole={
+                  hasAnyRole("ADMIN")
+                   ? "ADMIN"
+                  : officerProfile?.headOfficer
+                   ? "HEAD_OFFICER"
+                 : "OFFICER"
+                    }
+                  officerDept={officerProfile?.department}
+                     onError={setError}
+                     onLoadingChange={setLoading}
+                    onChanged={refresh}
+                    />
+                    )}
 
               {tab === "register-citizen" && (
-                <CitizenForm
+                <RegisterCitizenPage
                   loading={loading}
                   onError={setError}
                   onLoadingChange={setLoading}
@@ -704,29 +1099,124 @@ export default function App() {
               )}
 
               {tab === "file-grievance" && (
-                <GrievanceForm
-                  citizenId={officerCitizenId}
-                  loading={loading}
-                  onCitizenIdChange={setOfficerCitizenId}
-                  onError={setError}
-                  onLoadingChange={setLoading}
-                  onGrievanceCreated={() => { refresh(); setTab("grievances"); }}
+                <Grid container spacing={3} sx={{ alignItems: "flex-start" }}>
+                  <Grid size={{ xs: 12, lg: 8 }}>
+                    <GrievanceForm
+                      citizenId={officerCitizenId}
+                      loading={loading}
+                      onCitizenIdChange={setOfficerCitizenId}
+                      onError={setError}
+                      onLoadingChange={setLoading}
+                      onGrievanceCreated={() => { refresh(); setTab("grievances"); }}
+                    />
+                  </Grid>
+                 
+                  <Grid size={{ xs: 12, lg: 4 }}>
+                    <Box sx={{ mt: "66px" }}>
+                    <Paper sx={{ border: "1px solid #E4E8F0", overflow: "hidden", mb: 2 }}>
+                      <Box sx={{ background: "linear-gradient(135deg, #0F2557, #1A3A8F)", px: 2.5, py: 1.5 }}>
+                        <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.9)", fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", fontSize: "0.72rem" }}>
+                          How it works
+                        </Typography>
+                      </Box>
+                      <Box sx={{ p: 2 }}>
+                        {[
+                          { step: "1", text: "Enter the citizen's registered portal ID." },
+                          { step: "2", text: "Describe the issue clearly — include location and date." },
+                          { step: "3", text: "Set the priority. HIGH issues are resolved within 1 day." },
+                          { step: "4", text: "Submit — it will appear in Grievances for assignment." },
+                        ].map(({ step, text }) => (
+                          <Box key={step} sx={{ display: "flex", gap: 1, mb: 1.5, "&:last-child": { mb: 0 } }}>
+                            <Box sx={{ width: 20, height: 20, borderRadius: "50%", bgcolor: "#0F2557", color: "#fff", fontSize: "0.65rem", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, mt: 0.1 }}>
+                              {step}
+                            </Box>
+                            <Typography variant="caption" sx={{ color: "#3D4A6B", lineHeight: 1.6 }}>{text}</Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    </Paper>
+
+                    <Paper sx={{ border: "1px solid #E4E8F0", overflow: "hidden" }}>
+                      <Box sx={{ px: 2.5, py: 1.5, bgcolor: "#F0F4FF", borderBottom: "1px solid #E4E8F0" }}>
+                        <Typography variant="caption" sx={{ fontWeight: 700, color: "#1A3A8F", textTransform: "uppercase", letterSpacing: 0.5, fontSize: "0.72rem" }}>
+                          SLA Reference
+                        </Typography>
+                      </Box>
+                      <Box sx={{ p: 2 }}>
+                        {[
+                          { label: "HIGH",   sla: "1 day",  color: "#C62828", bg: "#FFEBEE" },
+                          { label: "MEDIUM", sla: "3 days", color: "#E65100", bg: "#FFF3E0" },
+                          { label: "LOW",    sla: "7 days", color: "#2E7D32", bg: "#E8F5E9" },
+                        ].map(({ label, sla, color, bg }) => (
+                          <Box key={label} sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", p: 1, mb: 0.75, borderRadius: 1.5, bgcolor: bg, "&:last-child": { mb: 0 } }}>
+                            <Typography variant="caption" sx={{ fontWeight: 700, color }}>{label}</Typography>
+                            <Typography variant="caption" sx={{ color, fontWeight: 600 }}>Resolve within {sla}</Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    </Paper>
+                  </Box>
+                  </Grid>
+                </Grid>
+              )}
+
+              {/* Department Head: manage their own dept officers */}
+              {tab === "dept-officers" && isOfficer && !isAdmin && officerProfile?.headOfficer && (
+                <DeptOfficerManagement
+                  department={officerProfile.department}
+                  currentOfficerEmail={officerProfile.email}
                 />
               )}
 
+              {/* Admin-only tabs */}
               {tab === "officer-mgmt" && isAdmin && (
                 <OfficerManagement onError={setError} onLoadingChange={setLoading} />
               )}
 
               {tab === "reports" && isAdmin && (
-                <ReportsView certStats={certStats} />
+                <ReportsPage certStats={certStats} grievances={grievances} />
+              )}
+
+              {tab === "welfare-schemes" && (
+  <WelfareSchemes
+    onError={setError}
+    onLoadingChange={setLoading}
+  />
+)}
+
+{tab === "beneficiaries" && (
+  <BeneficiaryManagement
+    onError={setError}
+    onLoadingChange={setLoading}
+  />
+)}
+
+{tab === "fund-disbursement" && (
+  <FundDisbursement
+    onError={setError}
+    onLoadingChange={setLoading}
+  />
+)}
+
+              {tab === "profile" && (isOfficer || isAdmin) && (
+                <ProfileTab
+                  citizenProfile={null}
+                  roleLabel={roleConfig.label}
+                  roleColor={roleConfig.color}
+                  roleBg={roleConfig.bg}
+                  onError={setError}
+                  onLoadingChange={setLoading}
+                />
               )}
             </>
           )}
         </Box>
 
         {/* Footer */}
-        <Box sx={{ px: 3, py: 1.5, borderTop: "1px solid #E4E8F0", bgcolor: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Box sx={{
+          px: 3, py: 1.5, borderTop: "1px solid #E4E8F0", bgcolor: "#fff",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
           <Typography variant="caption" color="text.secondary">
             © 2026 CivicPulse Nexus · Government Digital Services
           </Typography>

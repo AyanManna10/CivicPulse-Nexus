@@ -93,3 +93,85 @@ export interface CitizenProfile {
   aadharMasked: string;
   status: string;
 }
+// ── Welfare ──────────────────────────────────────────────────────────────────
+
+export interface WelfareScheme {
+  id: number;
+  schemeCode: string;
+  name: string;
+  department: string;
+  schemeType: string;
+  description: string;
+  eligibilityCriteria: string;
+  budgetAllocated: number;
+  budgetDisbursed: number;
+  beneficiaryCount: number;
+  startDate: string;
+  endDate: string;
+  status: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface Beneficiary {
+  id: number;
+  beneficiaryCode: string;
+  citizenId: number;
+  citizenName: string;
+  schemeId: number;
+  schemeName: string;
+  enrollmentDate: string;
+  eligibilityStatus: string;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  docsStatus: string;
+  status: string;
+  remarks: string | null;
+  createdAt: string;
+}
+
+export interface FundDistribution {
+  id: number;
+  distributionCode: string;
+  beneficiaryId: number;
+  beneficiaryName: string;
+  schemeId: number;
+  schemeName: string;
+  amount: number;
+  paymentMode: string;
+  paymentStatus: string;
+  transactionRef: string | null;
+  remarks: string | null;
+  disbursedBy: string;
+  paidAt: string | null;
+  createdAt: string;
+}
+
+export interface WelfareStats {
+  totalSchemes: number;
+  activeSchemes: number;
+  totalBeneficiaries: number;
+  totalDisbursed: number;
+  totalAllocated: number;
+  utilizationPct: number;
+}
+
+// ── Scheme Applications ──────────────────────────────────────────────────────
+
+export interface SchemeApplication {
+  id: number;
+  applicationCode: string;
+  citizenId: number;
+  citizenName: string;
+  citizenEmail: string;
+  schemeId: number;
+  schemeName: string;
+  status: string;
+  rejectionReason: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  documents: string | null;
+  remarks: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+}

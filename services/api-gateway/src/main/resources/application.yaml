@@ -45,6 +45,10 @@ spring:
               uri: http://localhost:8084
               predicates:
                 - Path=/api/certificates/**
+            - id: welfare-service
+              uri: http://localhost:8085
+              predicates:
+                - Path=/api/welfare/**
 
   security:
     oauth2:

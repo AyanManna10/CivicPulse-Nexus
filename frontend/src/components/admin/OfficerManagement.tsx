@@ -19,6 +19,7 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import HowToRegIcon from "@mui/icons-material/HowToReg";
 import type { Officer } from "../../types";
 import { api } from "../../api";
+import DeleteIcon from "@mui/icons-material/Delete";
 
 const DEPARTMENTS = [
   "Health Department",
@@ -73,7 +74,7 @@ export default function OfficerManagement({ onError, onLoadingChange }: Props) {
   const [success, setSuccess]             = useState("");
   const [filterDept, setFilterDept]       = useState("");
   const [filterStatus, setFilterStatus]   = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
-  const [mainTab, setMainTab]             = useState<"OFFICERS" | "ADMINS" | "PENDING">("OFFICERS");
+  const [mainTab, setMainTab]             = useState<"OFFICERS" | "ADMINS">("OFFICERS");
 
   // Pending registrations
   const [pending, setPending]             = useState<PendingRegistration[]>([]);
@@ -169,6 +170,19 @@ export default function OfficerManagement({ onError, onLoadingChange }: Props) {
     finally { onLoadingChange(false); }
   };
 
+  //Deletion
+
+  const deleteOfficer = async (o: Officer) => {
+    if (!confirm(`Permanently delete "${o.fullName}"? This cannot be undone.\n\nTheir Keycloak account will remain but DB record will be removed.`)) return;
+    onLoadingChange(true);
+    try {
+      await api.delete(`/api/officers/${o.id}`);
+      setSuccess(`"${o.fullName}" permanently deleted.`);
+      loadOfficers();
+    } catch { onError("Failed to delete officer"); }
+    finally { onLoadingChange(false); }
+  };
+
   // ── Import from Keycloak ───────────────────────────────────────────────────
 
   const importFromKeycloak = async () => {
@@ -239,15 +253,16 @@ export default function OfficerManagement({ onError, onLoadingChange }: Props) {
     finally { onLoadingChange(false); }
   };
 
-  const openDocs = async (pr: PendingRegistration) => {
-  setDocsTarget(pr);
-  setDocsList([]);
-  setDocsLoading(true);
-  try {
-    const res = await api.get(`/api/citizens/pending/${pr.id}/documents`);
-    setDocsList(res.data);
-  } catch { setDocsList([]); }
-  finally { setDocsLoading(false); }
+    const openDocs = async (pr: PendingRegistration, e: React.MouseEvent) => {
+    (e.currentTarget as HTMLElement).blur();
+    setDocsTarget(pr);
+    setDocsList([]);
+    setDocsLoading(true);
+    try {
+      const res = await api.get(`/api/citizens/pending/${pr.id}/documents`);
+      setDocsList(res.data);
+    } catch { setDocsList([]); }
+    finally { setDocsLoading(false); }
   };
 
   // ── Display filtering ──────────────────────────────────────────────────────
@@ -286,11 +301,6 @@ export default function OfficerManagement({ onError, onLoadingChange }: Props) {
             </Typography>
             <Typography variant="caption" color="text.secondary">
               {activeCount} active · {inactiveCount} inactive · {deptCount} department(s)
-              {pendingCount > 0 && (
-                <Box component="span" sx={{ ml: 1, color: "#E65100", fontWeight: 700 }}>
-                  · {pendingCount} pending verification
-                </Box>
-              )}
             </Typography>
           </Box>
         </Box>
@@ -404,7 +414,7 @@ export default function OfficerManagement({ onError, onLoadingChange }: Props) {
 
       {/* ── Main tabs: Officers / Admins / Pending ── */}
       <Box sx={{ display: "flex", mb: 2, border: "1px solid #CBD2E0", borderRadius: 1.5, overflow: "hidden", width: "fit-content" }}>
-        {(["OFFICERS", "ADMINS", "PENDING"] as const).map((t) => (
+        {(["OFFICERS", "ADMINS"] as const).map((t) => (
           <Box
             key={t}
             onClick={() => setMainTab(t)}
@@ -416,22 +426,7 @@ export default function OfficerManagement({ onError, onLoadingChange }: Props) {
               position: "relative",
             }}
           >
-            {t === "OFFICERS" ? `Officers (${officerOnly.length})`
-              : t === "ADMINS" ? `Admins (${adminOnly.length})`
-              : (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                  Pending Verification
-                  {pendingCount > 0 && (
-                    <Box sx={{
-                      bgcolor: mainTab === "PENDING" ? "#fff" : "#E65100",
-                      color: mainTab === "PENDING" ? "#E65100" : "#fff",
-                      borderRadius: "10px", px: 0.75, fontSize: "0.68rem", fontWeight: 800, lineHeight: 1.6,
-                    }}>
-                      {pendingCount}
-                    </Box>
-                  )}
-                </Box>
-              )}
+             {t === "OFFICERS" ? `Officers (${officerOnly.length})` : `Admins (${adminOnly.length})`}
           </Box>
         ))}
       </Box>
@@ -467,99 +462,9 @@ export default function OfficerManagement({ onError, onLoadingChange }: Props) {
         </Box>
       )}
 
-      {/* ── Pending Registrations Panel ── */}
-      {mainTab === "PENDING" && (
-        <Paper sx={{ border: "1px solid #E4E8F0", overflow: "hidden" }}>
-          {pending.length === 0 ? (
-            <Box sx={{ py: 8, textAlign: "center" }}>
-              <HowToRegIcon sx={{ fontSize: 48, color: "#CBD2E0", mb: 1.5 }} />
-              <Typography variant="body2" color="text.secondary">No pending citizen registrations</Typography>
-              <Typography variant="caption" color="text.secondary">
-                New self-registrations from the public portal will appear here for review
-              </Typography>
-            </Box>
-          ) : (
-            <>
-              <Box sx={{ px: 2.5, py: 1.5, bgcolor: "#FFF8E1", borderBottom: "1px solid #FFE082" }}>
-                <Typography variant="caption" sx={{ color: "#E65100", fontWeight: 700 }}>
-                  {pending.length} application(s) awaiting verification — review details carefully before approving
-                </Typography>
-              </Box>
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow sx={{ bgcolor: "#F8F9FC" }}>
-                      {["Full Name", "Email", "Mobile", "DOB", "Gender", "Aadhaar", "Address", "Submitted", "Actions"].map((h) => (
-                        <TableCell key={h} sx={{ fontWeight: 700, color: "#5A6072", fontSize: "0.75rem", whiteSpace: "nowrap" }}>
-                          {h}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {pending.map((pr) => (
-                      <TableRow key={pr.id} hover>
-                        <TableCell>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>{pr.fullName}</Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="caption" color="text.secondary">{pr.email}</Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="caption">{pr.phone}</Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="caption">{pr.dob ?? "—"}</Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="caption">{pr.gender ?? "—"}</Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
-                            {pr.aadhaar ? "••••••••" + pr.aadhaar.slice(-4) : "—"}
-                          </Typography>
-                        </TableCell>
-                        <TableCell sx={{ maxWidth: 160 }}>
-                          <Typography variant="caption" sx={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {pr.address ?? "—"}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="caption" color="text.secondary">
-                            {pr.createdAt ? new Date(pr.createdAt).toLocaleDateString("en-IN") : "—"}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: "flex", gap: 0.5 }}>
-                            <Tooltip title="View submitted documents">
-                             <IconButton size="small" onClick={() => openDocs(pr)}>
-                                 <FolderOpenIcon fontSize="small" sx={{ color: "#1A3A8F" }} />
-                                  </IconButton>
-                                          </Tooltip>
-                                  <Tooltip title="Approve — create citizen account">
-                                   <IconButton size="small" color="success" onClick={() => approvePending(pr)}>
-                                     <CheckCircleIcon fontSize="small" />
-                                 </IconButton>
-                               </Tooltip>
-                           <Tooltip title="Reject registration">
-                                <IconButton size="small" color="error" onClick={() => openReject(pr)}>
-                              <CancelIcon fontSize="small" />
-                                 </IconButton>
-                              </Tooltip>
-                             </Box>
-                            </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </>
-          )}
-        </Paper>
-      )}
-
+      
       {/* ── Officers / Admins Table ── */}
-      {mainTab !== "PENDING" && (
+      
         <Paper sx={{ border: "1px solid #E4E8F0", overflow: "hidden" }}>
           <TableContainer>
             <Table size="small">
@@ -642,6 +547,12 @@ export default function OfficerManagement({ onError, onLoadingChange }: Props) {
                               </IconButton>
                             </Tooltip>
                           )}
+                          <Tooltip title="Permanently Delete">
+                            <IconButton size="small" color="error"
+                              onClick={() => deleteOfficer(o)}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -651,7 +562,7 @@ export default function OfficerManagement({ onError, onLoadingChange }: Props) {
             </Table>
           </TableContainer>
         </Paper>
-      )}
+      
 
       {/* ── Edit Dialog ── */}
       <Dialog open={!!editTarget} onClose={() => setEditTarget(null)} maxWidth="sm" fullWidth>
@@ -729,7 +640,7 @@ export default function OfficerManagement({ onError, onLoadingChange }: Props) {
       </Dialog>
 
       {/* ── Documents Dialog ── */}
-      <Dialog open={!!docsTarget} onClose={() => setDocsTarget(null)} maxWidth="sm" fullWidth>
+      <Dialog open={!!docsTarget} onClose={() => setDocsTarget(null)} maxWidth="sm" fullWidth disableRestoreFocus>
         <DialogTitle sx={{ fontWeight: 700, color: "#0F2557" }}>
           Documents — {docsTarget?.fullName}
         </DialogTitle>

@@ -51,7 +51,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/citizens").hasAnyRole("ADMIN", "OFFICER")
                 .requestMatchers(HttpMethod.PUT,  "/api/citizens/**").hasAnyRole("ADMIN", "OFFICER")
                 .requestMatchers(HttpMethod.DELETE, "/api/citizens/**").hasRole("ADMIN")
-
+                .requestMatchers(HttpMethod.POST, "/api/citizens/change-password").authenticated()
+                
                 // ── Officer management ────────────────────────────────────
                 .requestMatchers(HttpMethod.POST,   "/api/officers").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT,    "/api/officers/**").hasRole("ADMIN")
