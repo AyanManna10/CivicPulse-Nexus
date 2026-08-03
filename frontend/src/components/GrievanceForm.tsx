@@ -7,6 +7,7 @@ import AddCommentIcon from "@mui/icons-material/AddComment";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { api } from "../api";
 import type { Grievance } from "../types";
+import MenuItem from '@mui/material/MenuItem';
 
 interface Props {
   citizenId: string;
@@ -231,12 +232,12 @@ export default function GrievanceForm({
                 slotProps={{ select: { native: false } }}
               >
                 {DEPARTMENTS.map((dept) => (
-                  <option key={dept} value={dept}
-                    style={{ padding: "8px 16px", display: "block", cursor: "pointer" }}>
+                  <MenuItem key={dept} value={dept}>
                     {dept}
-                  </option>
+                  </MenuItem>
                 ))}
               </TextField>
+    
             </Grid>
 
             {/* Priority selector */}

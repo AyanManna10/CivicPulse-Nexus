@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 import java.util.Map;
 
@@ -47,7 +48,7 @@ public class SchemeApplicationController {
     }
 
     @GetMapping("/scheme/{schemeId}")
-    @Operation(summary = "Get all applications for a scheme")
+    @Operation(summary = "Get all applications for a scheme (Admin / Officer)")
     public List<SchemeApplicationDtoResponse> getApplicationsByScheme(
             @PathVariable Long schemeId) {
         return service.getApplicationsByScheme(schemeId);
@@ -61,7 +62,7 @@ public class SchemeApplicationController {
     }
 
     @PutMapping("/{id}/verify")
-    @Operation(summary = "Officer verifies and approves application (auto-creates beneficiary)")
+    @Operation(summary = "Officer approves application and auto-creates beneficiary")
     public ResponseEntity<?> verifyApplication(
             @PathVariable Long id,
             @AuthenticationPrincipal Jwt jwt) {
@@ -85,6 +86,43 @@ public class SchemeApplicationController {
         return ResponseEntity.ok(Map.of(
                 "application", result,
                 "message", "Application rejected"
+        ));
+    }
+
+    // ── NEW: Citizen withdraws a PENDING application ──────────────────────────
+    @PutMapping("/{id}/withdraw")
+    @Operation(summary = "Citizen withdraws their own PENDING application")
+    public ResponseEntity<?> withdrawApplication(
+            @PathVariable Long id,
+            @RequestBody Map<String, Long> body,
+            @AuthenticationPrincipal Jwt jwt) {
+        Long citizenId = body.get("citizenId");
+        if (citizenId == null)
+            return ResponseEntity.badRequest().body(Map.of("error", "citizenId is required"));
+        SchemeApplicationDtoResponse result = service.withdrawApplication(id, citizenId);
+        return ResponseEntity.ok(Map.of(
+                "application", result,
+                "message", "Application withdrawn successfully"
+        ));
+    }
+
+    // ── NEW: Citizen resubmits a REJECTED application ─────────────────────────
+    @PutMapping("/{id}/resubmit")
+    @Operation(summary = "Citizen resubmits a REJECTED application (resets to PENDING)")
+    public ResponseEntity<?> resubmitApplication(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body,
+            @AuthenticationPrincipal Jwt jwt) {
+        Long citizenId = body.get("citizenId") != null
+                ? Long.valueOf(body.get("citizenId").toString()) : null;
+        String remarks = body.get("remarks") != null
+                ? body.get("remarks").toString() : null;
+        if (citizenId == null)
+            return ResponseEntity.badRequest().body(Map.of("error", "citizenId is required"));
+        SchemeApplicationDtoResponse result = service.resubmitApplication(id, citizenId, remarks);
+        return ResponseEntity.ok(Map.of(
+                "application", result,
+                "message", "Application resubmitted — officer will review again"
         ));
     }
 }

@@ -64,6 +64,8 @@ public class OfficerServiceImpl implements OfficerService {
         officer.setKeycloakRole(request.getKeycloakRole() != null
                 ? request.getKeycloakRole() : "OFFICER");
         officer.setHeadOfficer(request.isHeadOfficer());
+        // Derive Keycloak username from email prefix (matches Keycloak default behaviour)
+        officer.setUsername(request.getEmail().split("@")[0].toLowerCase());
 
         Officer saved = officerRepository.save(officer);
 
@@ -106,6 +108,22 @@ public class OfficerServiceImpl implements OfficerService {
         Officer officer = officerRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Officer not found with email: " + email));
         return toResponse(officer);
+    }
+
+    @Override
+    public OfficerResponse getOfficerByUsername(String username) {
+        // Try direct username match first
+        return officerRepository.findByUsername(username)
+                .map(this::toResponse)
+                // Fallback: some officers were created before username field existed;
+                // try matching email prefix (the part before @)
+                .orElseGet(() -> officerRepository.findAll().stream()
+                        .filter(o -> o.getEmail() != null &&
+                                o.getEmail().split("@")[0].equalsIgnoreCase(username))
+                        .findFirst()
+                        .map(this::toResponse)
+                        .orElseThrow(() -> new RuntimeException(
+                                "Officer not found with username: " + username)));
     }
 
     // ── Update ──────────────────────────────────────────────────────────────
@@ -185,6 +203,8 @@ public class OfficerServiceImpl implements OfficerService {
                 officer.setKeycloakRole(roleName);
                 officer.setHeadOfficer(false);
                 officer.setStatus("ACTIVE");
+                // Store Keycloak username so inter-service lookups work
+                officer.setUsername(u.getUsername());
 
                 officerRepository.save(officer);
                 count++;

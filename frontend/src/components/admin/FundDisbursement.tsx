@@ -9,6 +9,7 @@ import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import AddIcon from "@mui/icons-material/Add";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
+import DownloadIcon from "@mui/icons-material/Download";
 import type { FundDistribution, WelfareScheme } from "../../types";
 import { api } from "../../api";
 
@@ -91,8 +92,19 @@ export default function FundDisbursement({ onError, onLoadingChange }: Props) {
     } finally { onLoadingChange(false); }
   };
 
+    const [disburseSubmitting, setDisburseSubmitting] = useState(false);
+
   const disburse = async () => {
-    if (!disburseTarget) return;
+    if (!disburseTarget || disburseSubmitting) return;
+    if (!txnRef.trim()) {
+      onError("Transaction reference is required to mark as disbursed");
+      return;
+    }
+    const txnPattern = /^[A-Za-z0-9\-\/]{6,30}$/;
+    if (!txnPattern.test(txnRef.trim())) {
+      onError("Transaction ID must be 6-30 characters (letters, numbers, hyphens only)");
+      return;
+    }
     onError(""); onLoadingChange(true);
     try {
       await api.put(`/api/welfare/distributions/${disburseTarget.id}/disburse`, { transactionRef: txnRef });
@@ -116,6 +128,27 @@ export default function FundDisbursement({ onError, onLoadingChange }: Props) {
 
   const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
+  const exportToCsv = () => {
+    if (distributions.length === 0) return;
+    const rows = distributions.map(d => ({
+      Code: d.distributionCode,
+      Beneficiary: d.beneficiaryName,
+      Scheme: d.schemeName,
+      Amount: d.amount,
+      Mode: d.paymentMode,
+      Status: d.paymentStatus,
+      TransactionRef: d.transactionRef ?? "",
+      DisbursedBy: d.disbursedBy ?? "",
+      PaidAt: d.paidAt ? new Date(d.paidAt).toLocaleDateString("en-IN") : "",
+    }));
+    const headers = Object.keys(rows[0]).join(",");
+    const csv = [headers, ...rows.map(r => Object.values(r).map(v => `"${v}"`).join(","))].join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = "distributions.csv";
+    a.click();
+  };
+
   const pendingCount = distributions.filter(d => d.paymentStatus === "PENDING").length;
   const paidCount    = distributions.filter(d => d.paymentStatus === "PAID").length;
   const totalPaid    = distributions.filter(d => d.paymentStatus === "PAID").reduce((s, d) => s + d.amount, 0);
@@ -133,10 +166,16 @@ export default function FundDisbursement({ onError, onLoadingChange }: Props) {
             <Typography variant="caption" color="text.secondary">Track and disburse welfare payments to beneficiaries</Typography>
           </Box>
         </Box>
-        <Button variant="contained" size="small" startIcon={<AddIcon />}
-          onClick={() => setShowCreate(true)}>
-          New Distribution
-        </Button>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          <Button variant="outlined" size="small" startIcon={<DownloadIcon />}
+            onClick={exportToCsv} disabled={distributions.length === 0}>
+            Export CSV
+          </Button>
+          <Button variant="contained" size="small" startIcon={<AddIcon />}
+            onClick={() => setShowCreate(true)}>
+            New Distribution
+          </Button>
+        </Box>
       </Box>
 
       {success && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess("")}>{success}</Alert>}
@@ -223,12 +262,22 @@ export default function FundDisbursement({ onError, onLoadingChange }: Props) {
                           <>
                             <Tooltip title="Mark as Disbursed">
                               <IconButton size="small" color="success"
-                                onClick={() => { setDisburseTarget(d); setTxnRef(""); }}>
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.currentTarget.blur();
+                                  setDisburseTarget(d);
+                                  setTxnRef("");
+                                }}>
                                 <CheckCircleIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
                             <Tooltip title="Mark as Failed">
-                              <IconButton size="small" color="error" onClick={() => markFailed(d.id)}>
+                              <IconButton size="small" color="error"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.currentTarget.blur();
+                                  markFailed(d.id);
+                                }}>
                                 <CancelIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
@@ -245,7 +294,7 @@ export default function FundDisbursement({ onError, onLoadingChange }: Props) {
       </Paper>
 
       {/* Create Distribution Dialog */}
-      <Dialog open={showCreate} onClose={() => setShowCreate(false)} maxWidth="sm" fullWidth>
+      <Dialog open={showCreate} onClose={() => setShowCreate(false)} maxWidth="sm" fullWidth disableRestoreFocus>
         <DialogTitle sx={{ fontWeight: 700, color: "#0F2557" }}>New Fund Distribution</DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 1, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -305,7 +354,7 @@ export default function FundDisbursement({ onError, onLoadingChange }: Props) {
       </Dialog>
 
       {/* Disburse Confirmation Dialog */}
-      <Dialog open={!!disburseTarget} onClose={() => setDisburseTarget(null)} maxWidth="xs" fullWidth>
+      <Dialog open={!!disburseTarget} onClose={() => setDisburseTarget(null)} maxWidth="xs" fullWidth disableRestoreFocus>
         <DialogTitle sx={{ fontWeight: 700, color: "#2E7D32" }}>Confirm Disbursement</DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 1, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -314,16 +363,27 @@ export default function FundDisbursement({ onError, onLoadingChange }: Props) {
                 Marking <strong>{fmt(disburseTarget.amount)}</strong> to <strong>{disburseTarget.beneficiaryName}</strong> as paid.
               </Alert>
             )}
-            <TextField fullWidth label="Transaction Reference" value={txnRef}
+            <TextField fullWidth label="Transaction Reference *" value={txnRef}
               onChange={e => setTxnRef(e.target.value)}
-              helperText="Enter bank/UPI transaction ID for audit trail" />
+              error={txnRef.trim().length > 0 && txnRef.trim().length < 6}
+              helperText={
+                txnRef.trim().length > 0 && txnRef.trim().length < 6
+                  ? "Minimum 6 characters required"
+                  : "Enter bank/UPI/NEFT transaction ID (e.g. TXN123456789)"
+              }
+              placeholder="e.g. TXN123456789, UPI/123456/2026" />
           </Box>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setDisburseTarget(null)}>Cancel</Button>
-          <Button variant="contained" color="success" onClick={disburse}
-            startIcon={<CheckCircleIcon />}>
-            Confirm Disbursement
+          <Button variant="contained" color="success" onClick={async () => {
+              setDisburseSubmitting(true);
+              await disburse();
+              setDisburseSubmitting(false);
+            }}
+            disabled={disburseSubmitting}
+            startIcon={disburseSubmitting ? null : <CheckCircleIcon />}>
+            {disburseSubmitting ? "Processing…" : "Confirm Disbursement"}
           </Button>
         </DialogActions>
       </Dialog>

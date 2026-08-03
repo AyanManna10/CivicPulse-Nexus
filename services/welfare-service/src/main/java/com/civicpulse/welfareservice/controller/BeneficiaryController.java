@@ -68,6 +68,26 @@ public class BeneficiaryController {
         return service.verifyBeneficiary(id, verifiedBy);
     }
 
+        @PutMapping("/{id}/docs/complete")
+    @Operation(summary = "Mark beneficiary documents as complete (Officer / Admin)")
+    public BeneficiaryDtoResponse markDocsComplete(
+            @PathVariable Long id,
+            @AuthenticationPrincipal Jwt jwt) {
+        String reviewedBy = jwt.getClaimAsString("preferred_username");
+        return service.markDocsComplete(id, reviewedBy);
+    }
+
+    @PutMapping("/{id}/docs/missing")
+    @Operation(summary = "Mark beneficiary documents as missing (Officer / Admin)")
+    public BeneficiaryDtoResponse markDocsMissing(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> body,
+            @AuthenticationPrincipal Jwt jwt) {
+        String requestedDocType = body != null ? body.getOrDefault("requestedDocType", null) : null;
+        String reviewedBy = jwt.getClaimAsString("preferred_username");
+        return service.markDocsMissing(id, requestedDocType, reviewedBy);
+    }
+
     @PutMapping("/{id}/deactivate")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Operation(summary = "Deactivate a beneficiary")

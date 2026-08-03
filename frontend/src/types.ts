@@ -128,6 +128,8 @@ export interface Beneficiary {
   status: string;
   remarks: string | null;
   createdAt: string;
+  latestPaymentStatus: string | null;
+  latestPaymentAmount: number | null;
 }
 
 export interface FundDistribution {

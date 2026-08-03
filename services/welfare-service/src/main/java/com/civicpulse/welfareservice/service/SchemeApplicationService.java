@@ -12,4 +12,8 @@ public interface SchemeApplicationService {
     List<SchemeApplicationDtoResponse> getPendingApplicationsByScheme(Long schemeId);
     SchemeApplicationDtoResponse verifyApplication(Long id, String reviewedBy);
     SchemeApplicationDtoResponse rejectApplication(Long id, String reviewedBy, String rejectionReason);
+
+    // ── NEW ──────────────────────────────────────────────────────────────────
+    SchemeApplicationDtoResponse withdrawApplication(Long id, Long citizenId);
+    SchemeApplicationDtoResponse resubmitApplication(Long id, Long citizenId, String remarks);
 }

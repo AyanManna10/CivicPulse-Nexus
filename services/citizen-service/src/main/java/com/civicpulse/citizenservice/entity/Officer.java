@@ -25,6 +25,10 @@ public class Officer {
     @Column(unique = true, nullable = false)
     private String email;
 
+    /** Keycloak preferred_username — populated on creation, nullable for legacy records */
+    @Column(unique = true)
+    private String username;
+
     @Column(nullable = false)
     private String phone;
 

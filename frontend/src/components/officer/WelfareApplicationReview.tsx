@@ -6,6 +6,7 @@ import {
   Grid, Tooltip, IconButton
 } from "@mui/material";
 import AssignmentIcon from "@mui/icons-material/Assignment";
+import Checkbox from "@mui/material/Checkbox";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import DescriptionIcon from "@mui/icons-material/Description";
@@ -30,6 +31,12 @@ export default function WelfareApplicationReview({ officerDept, onError, onLoadi
   const [rejectTarget, setRejectTarget] = useState<SchemeApplication | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [docsDialog, setDocsDialog] = useState<{ appId: number; docs: any[] } | null>(null);
+  const [selected, setSelected] = useState<number[]>([]);
+  const [bulkRejectOpen, setBulkRejectOpen] = useState(false);
+  const [bulkRejectReason, setBulkRejectReason] = useState("");
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [approveTarget, setApproveTarget] = useState<SchemeApplication | null>(null);
+  const [approvalRemarks, setApprovalRemarks] = useState("");
 
   useEffect(() => { loadSchemes(); }, []);
   useEffect(() => { if (selectedScheme) loadApplications(selectedScheme as number); }, [selectedScheme]);
@@ -84,12 +91,21 @@ export default function WelfareApplicationReview({ officerDept, onError, onLoadi
     } catch { onError("Failed to open document"); }
   };
 
-  const approve = async (id: number, name: string) => {
-    if (!confirm(`Approve application for "${name}"?\n\nThey will be enrolled as a beneficiary automatically.`)) return;
+  const approve = (id: number, name: string, app: SchemeApplication) => {
+    setApproveTarget(app);
+    setApprovalRemarks("");
+  };
+
+  const confirmApprove = async () => {
+    if (!approveTarget) return;
     onError(""); onLoadingChange(true);
     try {
-      await api.put(`/api/welfare/applications/${id}/verify`);
-      setSuccess(`Application approved. "${name}" is now a beneficiary.`);
+      await api.put(`/api/welfare/applications/${approveTarget.id}/verify`, {
+        remarks: approvalRemarks || null
+      });
+      setSuccess(`Application approved. "${approveTarget.citizenName}" is now a beneficiary.`);
+      setApproveTarget(null);
+      setApprovalRemarks("");
       if (selectedScheme) loadApplications(selectedScheme as number);
     } catch { onError("Approval failed"); }
     finally { onLoadingChange(false); }
@@ -108,6 +124,43 @@ export default function WelfareApplicationReview({ officerDept, onError, onLoadi
       if (selectedScheme) loadApplications(selectedScheme as number);
     } catch { onError("Rejection failed"); }
     finally { onLoadingChange(false); }
+  };
+
+  const toggleSelect = (id: number) =>
+    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
+  const toggleSelectAll = () =>
+    setSelected(prev => prev.length === applications.length ? [] : applications.map(a => a.id));
+
+  const bulkApprove = async () => {
+    if (!selected.length) return;
+    if (!confirm(`Approve ${selected.length} selected application(s)?`)) return;
+    setBulkLoading(true); onError("");
+    let successCount = 0;
+    for (const id of selected) {
+      try { await api.put(`/api/welfare/applications/${id}/verify`); successCount++; }
+      catch { /* continue others */ }
+    }
+    setSuccess(`${successCount} application(s) approved and enrolled as beneficiaries.`);
+    setSelected([]);
+    setBulkLoading(false);
+    if (selectedScheme) loadApplications(selectedScheme as number);
+  };
+
+  const bulkReject = async () => {
+    if (!bulkRejectReason.trim()) return;
+    setBulkLoading(true); onError("");
+    let successCount = 0;
+    for (const id of selected) {
+      try { await api.put(`/api/welfare/applications/${id}/reject`, { rejectionReason: bulkRejectReason }); successCount++; }
+      catch { /* continue others */ }
+    }
+    setSuccess(`${successCount} application(s) rejected.`);
+    setSelected([]);
+    setBulkRejectOpen(false);
+    setBulkRejectReason("");
+    setBulkLoading(false);
+    if (selectedScheme) loadApplications(selectedScheme as number);
   };
 
   const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
@@ -159,12 +212,38 @@ export default function WelfareApplicationReview({ officerDept, onError, onLoadi
             )}
           </Paper>
 
+          {/* Bulk Action Bar */}
+          {selected.length > 0 && (
+            <Paper sx={{ p: 1.5, mb: 1.5, border: "1px solid #1A3A8F", bgcolor: "#E8EDFB", display: "flex", alignItems: "center", gap: 2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: "#0F2557", flex: 1 }}>
+                {selected.length} application(s) selected
+              </Typography>
+              <Button size="small" variant="contained" color="success"
+                startIcon={<CheckCircleIcon />} onClick={bulkApprove} disabled={bulkLoading}>
+                Approve All
+              </Button>
+              <Button size="small" variant="contained" color="error"
+                startIcon={<CancelIcon />} onClick={() => { setBulkRejectReason(""); setBulkRejectOpen(true); }} disabled={bulkLoading}>
+                Reject All
+              </Button>
+              <Button size="small" variant="outlined" onClick={() => setSelected([])}>
+                Clear
+              </Button>
+            </Paper>
+          )}
+
           {/* Applications Table */}
           <Paper sx={{ border: "1px solid #E4E8F0", overflow: "hidden" }}>
             <TableContainer>
               <Table size="small">
                 <TableHead>
                   <TableRow sx={{ bgcolor: "#F8F9FC" }}>
+                    <TableCell padding="checkbox">
+                      <Checkbox size="small"
+                        checked={applications.length > 0 && selected.length === applications.length}
+                        indeterminate={selected.length > 0 && selected.length < applications.length}
+                        onChange={toggleSelectAll} />
+                    </TableCell>
                     {["Code", "Citizen Name", "Email", "Documents", "Remarks", "Submitted", "Status", "Actions"].map(h => (
                       <TableCell key={h} sx={{ fontWeight: 700, color: "#5A6072", fontSize: "0.75rem", whiteSpace: "nowrap" }}>{h}</TableCell>
                     ))}
@@ -173,14 +252,20 @@ export default function WelfareApplicationReview({ officerDept, onError, onLoadi
                 <TableBody>
                   {applications.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} sx={{ textAlign: "center", py: 5, color: "#9AA3B5" }}>
+                      <TableCell colSpan={9} sx={{ textAlign: "center", py: 5, color: "#9AA3B5" }}>
                         No pending applications for this scheme
                       </TableCell>
                     </TableRow>
                   ) : applications.map(a => {
                     const ss = STATUS_STYLE[a.status] ?? { bg: "#F5F5F5", color: "#9AA3B5" };
                     return (
-                      <TableRow key={a.id} hover>
+                      <TableRow key={a.id} hover selected={selected.includes(a.id)}>
+                        <TableCell padding="checkbox">
+                          {a.status === "PENDING" && (
+                            <Checkbox size="small" checked={selected.includes(a.id)}
+                              onChange={() => toggleSelect(a.id)} />
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Typography variant="caption" sx={{ fontFamily: "monospace", fontWeight: 700, color: "#5A6072" }}>
                             {a.applicationCode}
@@ -221,7 +306,7 @@ export default function WelfareApplicationReview({ officerDept, onError, onLoadi
                               <>
                                 <Tooltip title="Approve & Enroll">
                                   <IconButton size="small" color="success"
-                                    onClick={() => approve(a.id, a.citizenName)}>
+                                    onClick={() => approve(a.id, a.citizenName, a)}>
                                     <CheckCircleIcon fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
@@ -244,6 +329,35 @@ export default function WelfareApplicationReview({ officerDept, onError, onLoadi
           </Paper>
         </>
       )}
+
+      {/* Approve with Remarks Dialog */}
+      <Dialog open={!!approveTarget} onClose={() => setApproveTarget(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, color: "#2E7D32" }}>
+          Approve Application — {approveTarget?.citizenName}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+            <Alert severity="success" sx={{ fontSize: "0.82rem" }}>
+              Approving this application will automatically enroll <strong>{approveTarget?.citizenName}</strong> as a beneficiary.
+            </Alert>
+            <Box>
+              <Typography variant="caption" sx={{ fontWeight: 700, color: "#5A6072", mb: 0.75, display: "block" }}>
+                Approval Remarks (Optional)
+              </Typography>
+              <TextField fullWidth multiline rows={3} size="small"
+                value={approvalRemarks} onChange={e => setApprovalRemarks(e.target.value)}
+                placeholder="e.g. All documents verified, eligible as per income criteria..." />
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setApproveTarget(null)}>Cancel</Button>
+          <Button variant="contained" color="success" onClick={confirmApprove}
+            startIcon={<CheckCircleIcon />}>
+            Confirm Approval
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Reject Dialog */}
       <Dialog open={!!rejectTarget} onClose={() => setRejectTarget(null)} maxWidth="sm" fullWidth>
@@ -273,6 +387,30 @@ export default function WelfareApplicationReview({ officerDept, onError, onLoadi
         </DialogActions>
       </Dialog>
 
+      {/* Bulk Reject Dialog */}
+      <Dialog open={bulkRejectOpen} onClose={() => setBulkRejectOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700, color: "#C62828" }}>
+          Bulk Reject — {selected.length} Application(s)
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+            <Alert severity="warning" sx={{ fontSize: "0.82rem" }}>
+              This rejection reason will be applied to all {selected.length} selected applications.
+            </Alert>
+            <TextField fullWidth multiline rows={3} size="small" label="Rejection Reason *"
+              value={bulkRejectReason} onChange={e => setBulkRejectReason(e.target.value)}
+              placeholder="e.g. Documents incomplete, Income exceeds eligibility limit..." />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setBulkRejectOpen(false)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={bulkReject}
+            disabled={!bulkRejectReason.trim() || bulkLoading}>
+            {bulkLoading ? "Rejecting…" : "Confirm Bulk Rejection"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Documents Dialog */}
       <Dialog open={!!docsDialog} onClose={() => setDocsDialog(null)} maxWidth="sm" fullWidth disableRestoreFocus>
         <DialogTitle sx={{ fontWeight: 700, color: "#0F2557" }}>
@@ -282,23 +420,44 @@ export default function WelfareApplicationReview({ officerDept, onError, onLoadi
           {!docsDialog || docsDialog.docs.length === 0 ? (
             <Alert severity="info" sx={{ mt: 1 }}>No documents uploaded for this application.</Alert>
           ) : (
-            <Box sx={{ pt: 2, display: "flex", flexDirection: "column", gap: 1.5 }}>
-              {docsDialog.docs.map(doc => (
-                <Box key={doc.id} sx={{ display: "flex", alignItems: "center", gap: 1.5, p: 1.5, bgcolor: "#F8F9FC", borderRadius: 1.5, border: "1px solid #E4E8F0" }}>
-                  <DescriptionIcon sx={{ color: "#1A3A8F", fontSize: 22 }} />
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600, color: "#0F2557" }}>
-                      {doc.docType}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {doc.originalName}
-                    </Typography>
-                  </Box>
-                  <Button size="small" variant="outlined"
-                    onClick={() => downloadDoc(doc.id, doc.originalName)}
-                    sx={{ fontSize: "0.72rem", whiteSpace: "nowrap" }}>
-                    View
-                  </Button>
+            <Box sx={{ pt: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+              <Typography variant="caption" sx={{ color: "#5A6072", fontWeight: 700 }}>
+                {docsDialog.docs.length} document(s) submitted
+              </Typography>
+              {/* Group docs by docType */}
+              {Object.entries(
+                docsDialog.docs.reduce((acc: Record<string, any[]>, doc) => {
+                  const key = doc.docType || "Other";
+                  if (!acc[key]) acc[key] = [];
+                  acc[key].push(doc);
+                  return acc;
+                }, {})
+              ).map(([docType, docs]) => (
+                <Box key={docType}>
+                  <Typography variant="caption" sx={{
+                    fontWeight: 700, color: "#1A3A8F", textTransform: "uppercase",
+                    letterSpacing: 0.5, fontSize: "0.68rem", display: "block", mb: 0.75
+                  }}>
+                    {docType}
+                  </Typography>
+                  {docs.map((doc: any) => (
+                    <Box key={doc.id} sx={{ display: "flex", alignItems: "center", gap: 1.5, p: 1.5, bgcolor: "#F8F9FC", borderRadius: 1.5, border: "1px solid #E4E8F0", mb: 0.75 }}>
+                      <DescriptionIcon sx={{ color: "#1A3A8F", fontSize: 22 }} />
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {doc.originalName}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: "#9AA3B5", fontSize: "0.65rem" }}>
+                          Uploaded: {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleString("en-IN") : "—"}
+                        </Typography>
+                      </Box>
+                      <Button size="small" variant="outlined"
+                        onClick={() => downloadDoc(doc.id, doc.originalName)}
+                        sx={{ fontSize: "0.72rem", whiteSpace: "nowrap" }}>
+                        View
+                      </Button>
+                    </Box>
+                  ))}
                 </Box>
               ))}
             </Box>

@@ -122,6 +122,14 @@ export default function WelfareSchemes({ onError, onLoadingChange }: Props) {
 
       {success && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess("")}>{success}</Alert>}
 
+      {/* Budget Alert Banner */}
+      {schemes.filter(s => s.budgetAllocated > 0 && (s.budgetDisbursed / s.budgetAllocated) >= 0.8).length > 0 && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {schemes.filter(s => s.budgetAllocated > 0 && (s.budgetDisbursed / s.budgetAllocated) >= 0.8).length} scheme(s) have used 80%+ of their budget:{" "}
+          {schemes.filter(s => s.budgetAllocated > 0 && (s.budgetDisbursed / s.budgetAllocated) >= 0.8).map(s => s.name).join(", ")}
+        </Alert>
+      )}
+
       {/* KPI Cards */}
       {stats && (
         <Grid container spacing={2} sx={{ mb: 2.5 }}>

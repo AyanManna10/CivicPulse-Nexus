@@ -128,5 +128,21 @@ public class OfficerController {
     public void deleteOfficer(@PathVariable Long id) {
         officerService.deleteOfficer(id);
     }
+
+    /**
+     * Inter-service endpoint — called by welfare-service to verify officer's department
+     * before allowing fund distribution creation.
+     * Tries username first, falls back to email for legacy officers.
+     */
+    @GetMapping("/by-username/{username}")
+    @Operation(summary = "Get officer by Keycloak username (inter-service use)")
+    public OfficerResponse getByUsername(@PathVariable String username) {
+        try {
+            return officerService.getOfficerByUsername(username);
+        } catch (Exception e) {
+            // Legacy fallback: try treating username as email
+            return officerService.getOfficerByEmail(username);
+        }
+    }
 }
 

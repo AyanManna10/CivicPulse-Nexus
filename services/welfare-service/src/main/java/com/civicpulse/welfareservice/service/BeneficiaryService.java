@@ -11,5 +11,7 @@ public interface BeneficiaryService {
     List<BeneficiaryDtoResponse> getBeneficiariesByCitizen(Long citizenId);
     BeneficiaryDtoResponse updateBeneficiary(Long id, BeneficiaryDtoRequest request);
     BeneficiaryDtoResponse verifyBeneficiary(Long id, String verifiedBy);
+    BeneficiaryDtoResponse markDocsComplete(Long id, String reviewedBy); // NEW
+    BeneficiaryDtoResponse markDocsMissing(Long id, String requestedDocType, String reviewedBy);                   // NEW
     void deactivateBeneficiary(Long id);
 }

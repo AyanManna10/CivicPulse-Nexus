@@ -38,6 +38,15 @@ spring:
       auto-offset-reset: earliest
     properties:
       spring.json.use.type.headers: false
+  
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 15MB
+
+welfare:
+  upload:
+    path: ${WELFARE_UPLOAD_PATH:C:/Project/uploads/welfare-docs}
 
 server:
   port: 8085
@@ -63,7 +72,3 @@ keycloak:
     target-realm: civicpulse
     citizen-role: CITIZEN
     client-secret: jN2aoubARsn0k9sdqRumX7Mxb4CJ2NMY
-
-app:
-  upload:
-    welfare-docs: C:\Project\uploads\welfare-docs

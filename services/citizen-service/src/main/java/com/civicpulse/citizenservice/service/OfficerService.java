@@ -16,6 +16,9 @@ public interface OfficerService {
     /** Find an officer by their email address. Used by GET /api/officers/me. */
     OfficerResponse getOfficerByEmail(String email);
 
+    /** Find an officer by their Keycloak preferred_username. Used by inter-service calls. */
+    OfficerResponse getOfficerByUsername(String username);
+
     List<OfficerResponse> getOfficersByDepartment(String department);
 
     List<OfficerResponse> getHeadOfficersByDepartment(String department);
