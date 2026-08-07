@@ -177,3 +177,72 @@ export interface SchemeApplication {
   createdAt: string;
   updatedAt: string | null;
 }
+// Add this to src/types.ts in the frontend
+
+export interface AnalyticsSummaryDto {
+  // Top KPI Cards
+  citizenSatisfactionScore: number;
+  serviceSlaPercent: number;
+  totalRevenueDisbursed: number;
+  budgetUtilizationPercent: number;
+  totalRequests: number;
+  complaintChangePercent: number;
+
+  // Grievance Analytics
+  totalGrievances: number;
+  resolvedGrievances: number;
+  overdueGrievances: number;
+  openGrievances: number;
+  avgResolutionDays: number;
+  grievancesByMonth: MonthlyCount[];
+
+  // Certificate Analytics
+  totalCertificates: number;
+  approvedCertificates: number;
+  rejectedCertificates: number;
+  pendingCertificates: number;
+  avgProcessingDays: number;
+  certificatesByMonth: MonthlyCount[];
+
+  // Welfare Analytics
+  totalWelfareApplications: number;
+  approvedWelfareApplications: number;
+  totalBeneficiaries: number;
+  totalAmountDisbursed: number;
+  totalBudgetAllocated: number;
+  schemeUtilizations: SchemeUtilization[];
+
+  // Citizen Analytics
+  totalCitizens: number;
+  activeCitizens: number;
+  newCitizensThisMonth: number;
+
+  // Department Performance
+  departmentPerformances: DepartmentPerformance[];
+}
+
+export interface MonthlyCount {
+  month: string;
+  count: number;
+}
+
+export interface SchemeUtilization {
+  schemeName: string;
+  department: string;
+  budgetAllocated: number;
+  budgetDisbursed: number;
+  utilizationPercent: number;
+  beneficiaryCount: number;
+}
+
+export interface DepartmentPerformance {
+  department: string;
+  totalGrievances: number;
+  resolvedGrievances: number;
+  resolutionRate: number;
+  avgResolutionDays: number;
+  slaBreaches: number;
+  certificatesProcessed: number;
+  welfareApplicationsProcessed: number;
+  performanceRating: string; // "EXCELLENT" | "GOOD" | "NEEDS_IMPROVEMENT"
+}

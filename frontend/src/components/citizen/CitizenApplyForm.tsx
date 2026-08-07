@@ -6,7 +6,6 @@ import {
 import ArticleIcon from "@mui/icons-material/Article";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
-import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import type { CertificateType } from "../../types";
 import { api } from "../../api";

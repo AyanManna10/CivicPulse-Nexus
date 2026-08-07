@@ -24,6 +24,7 @@ interface Props {
   pendingCount: number;
   officerProfile: OfficerProfile | null;
   onNavigate: (tab: string) => void;
+  onPendingWelfareAppsChange?: (count: number) => void;
 }
 
 interface QueueCounts {
@@ -104,7 +105,7 @@ function QueueCard({
   );
 }
 
-export default function OfficerQueueDashboard({ overdue, pendingCount, officerProfile, onNavigate }: Props) {
+export default function OfficerQueueDashboard({ overdue, pendingCount, officerProfile, onNavigate, onPendingWelfareAppsChange }: Props) {
   const [counts, setCounts] = useState<QueueCounts | null>(null);
   const dept = officerProfile?.department;
 
@@ -154,8 +155,10 @@ export default function OfficerQueueDashboard({ overdue, pendingCount, officerPr
 
       const todayStr = new Date().toISOString().slice(0, 10);
 
+      const pendingWelfare = allApps.filter(a => a.status === "PENDING").length;
+      onPendingWelfareAppsChange?.(pendingWelfare);
       setCounts({
-        pendingWelfareApps:  allApps.filter(a => a.status === "PENDING").length,
+        pendingWelfareApps: pendingWelfare,
         pendingDisbursements: allDists.filter(d => d.paymentStatus === "PENDING").length,
         openGrievances: allGrievances.filter(
           g => !["RESOLVED", "CLOSED"].includes(g.status)

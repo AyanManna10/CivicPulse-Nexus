@@ -2,8 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Box, Typography, Paper, Grid, Button, TextField, Alert,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Chip, Dialog, DialogTitle, DialogContent, DialogActions,
-  FormControl, InputLabel, Select, MenuItem, Divider, LinearProgress
+  Chip, FormControl, InputLabel, Select, MenuItem, Divider, LinearProgress
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import VolunteerActivismIcon from "@mui/icons-material/VolunteerActivism";
@@ -140,7 +139,7 @@ export default function WelfareSchemes({ onError, onLoadingChange }: Props) {
             { label: "Utilization", value: `${stats.utilizationPct}%`, sub: "budget utilized", icon: <TrendingUpIcon />, color: "#6A1B9A", bg: "#F3E5F5" },
           ].map(({ label, value, sub, icon, color, bg }) => (
             <Grid size={{ xs: 12, sm: 6, md: 3 }} key={label}>
-              <Paper sx={{ p: 2, border: "1px solid #E4E8F0", bgcolor: bg }}>
+              <Paper sx={{ p: 2, border: "1px solid #E4E8F0", bgcolor: bg, minHeight: 110 }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
                   <Box sx={{ color, fontSize: 20 }}>{icon}</Box>
                   <Typography variant="caption" sx={{ fontWeight: 700, color: "#5A6072", textTransform: "uppercase", letterSpacing: 0.5, fontSize: "0.68rem" }}>{label}</Typography>

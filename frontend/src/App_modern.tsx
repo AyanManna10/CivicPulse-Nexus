@@ -10,6 +10,8 @@ import CitizenDashboard from "./components/citizen/CitizenDashboard";
 import AdminAuditLog from "./components/admin/AdminAuditLog";
 import HistoryIcon from "@mui/icons-material/History";
 import NotificationPanel from "./components/shared/NotificationPanel";
+import GovernanceAnalytics from "./components/admin/GovernanceAnalytics";
+import AnalyticsIcon from "@mui/icons-material/Analytics";
 import {
   Typography, Alert, Button, Box, Chip, Divider, Grid, Paper,
   LinearProgress, Tooltip, Avatar, Badge
@@ -97,6 +99,7 @@ const NAV_ITEMS: NavItem[] = [
   // Admin-only
   { id: "officer-mgmt",     label: "Manage Officers",      icon: <GroupIcon fontSize="small" />,               roles: ["ADMIN"], section: "Administration" },
   { id: "reports",          label: "Reports & Analytics",  icon: <BarChartIcon fontSize="small" />,            roles: ["ADMIN"], section: "Administration" },
+  { id: "governance-analytics", label: "Governance Analytics", icon: <AnalyticsIcon fontSize="small" />, roles: ["ADMIN"], section: "Administration" },
   { id: "audit-log",        label: "Audit Log",            icon: <HistoryIcon fontSize="small" />,             roles: ["ADMIN"], section: "Administration" },
   { id: "profile",          label: "My Profile",           icon: <AccountCircleIcon fontSize="small" />,       roles: ["OFFICER", "ADMIN"], section: "Account" },
  
@@ -130,7 +133,7 @@ function getRoleConfig(roles: string[], officerProfile?: OfficerProfile | null) 
 
 function Sidebar({
   tab, onTabChange, roleConfig, username, overdueCount, pendingCount,
-  officerProfile, onLogout, criticalSchemes = 0, docsMissingCount = 0, newCertificateApplications = 0,
+  officerProfile, onLogout, criticalSchemes = 0, docsMissingCount = 0, newCertificateApplications = 0, pendingWelfareApps = 0,
 }: {
   tab: string;
   onTabChange: (t: string) => void;
@@ -143,6 +146,7 @@ function Sidebar({
   criticalSchemes?: number;
   docsMissingCount?: number;
   newCertificateApplications?: number;
+  pendingWelfareApps?: number;
 }) {
   
   const isHeadOfficer = officerProfile?.headOfficer === true;
@@ -224,11 +228,13 @@ function Sidebar({
                                (item.id === "register-citizen" && pendingCount > 0) ||
                                (item.id === "welfare-schemes" && criticalSchemes > 0) ||
                                (item.id === "beneficiaries" && docsMissingCount > 0) ||
-                               (item.id === "applications" && newCertificateApplications > 0);
+                               (item.id === "applications" && newCertificateApplications > 0) ||
+                               (item.id === "welfare-applications" && pendingWelfareApps > 0);
               const badgeCount = item.id === "grievances" ? overdueCount
                 : item.id === "welfare-schemes" ? criticalSchemes
                 : item.id === "beneficiaries" ? docsMissingCount
                 : item.id === "applications" ? newCertificateApplications
+                : item.id === "welfare-applications" ? pendingWelfareApps
                 : pendingCount;
               return (
                 <Box
@@ -306,12 +312,13 @@ function Sidebar({
 
 function TopBar({
   pageTitle, pageSubtitle, loading, overdueCount, pendingCount, deptLabel, criticalSchemes, criticalSchemeNames,
-  docsMissingCount, newCertificateApplications, onNavigate, isCitizen,
+  docsMissingCount, newCertificateApplications, pendingWelfareApps, onNavigate, isCitizen,
   citizenPendingApplications, citizenOpenGrievances,
 }: {
   pageTitle: string; pageSubtitle?: string; loading: boolean;
   overdueCount: number; pendingCount: number; deptLabel?: string; criticalSchemes?: number; criticalSchemeNames?: string[];
   docsMissingCount?: number; newCertificateApplications?: number;
+  pendingWelfareApps?: number;
   onNavigate?: (tab: string) => void;
   isCitizen?: boolean;
   citizenPendingApplications?: number;
@@ -550,6 +557,7 @@ export default function App() {
   const [criticalSchemeNames, setCriticalSchemeNames] = useState<string[]>([]);
   const [docsMissingCount, setDocsMissingCount] = useState(0);
   const [newCertificateApplications, setNewCertificateApplications] = useState(0);
+  const [pendingWelfareApps, setPendingWelfareApps] = useState(0);
   const [notificationCounts, setNotificationCounts] = useState({ pendingApplications: 0, openGrievances: 0 });
 
   const pollingRole = loggedIn
@@ -914,6 +922,7 @@ export default function App() {
           criticalSchemeNames={isAdmin ? criticalSchemeNames : []}
           docsMissingCount={docsMissingCount}
           newCertificateApplications={newCertificateApplications}
+          pendingWelfareApps={pendingWelfareApps}
           onNavigate={setTab}
           isCitizen={isCitizen}
           citizenPendingApplications={isCitizen ? notificationCounts.pendingApplications : 0}
@@ -1083,11 +1092,12 @@ export default function App() {
                 <>
                   {isOfficer && !isAdmin ? (
                     <OfficerQueueDashboard
-                      overdue={overdue}
-                      pendingCount={pendingCount}
-                      officerProfile={officerProfile}
-                      onNavigate={setTab}
-                    />
+                overdue={overdue}
+                pendingCount={pendingCount}
+                officerProfile={officerProfile}
+                onNavigate={setTab}
+                onPendingWelfareAppsChange={setPendingWelfareApps}
+              />
                   ) : (
                     <>
                       <Dashboard dashboard={dashboard} overdue={overdue} />
@@ -1211,6 +1221,12 @@ export default function App() {
                   onError={setError}
                   onLoadingChange={setLoading}
                   onCitizenRegistered={(id) => { setOfficerCitizenId(id); setTab("file-grievance"); }}
+                />
+              )}
+              {tab === "governance-analytics" && isAdmin && (
+                <GovernanceAnalytics
+                  onError={setError}
+                  onLoadingChange={setLoading}
                 />
               )}
               {tab === "audit-log" && isAdmin && (

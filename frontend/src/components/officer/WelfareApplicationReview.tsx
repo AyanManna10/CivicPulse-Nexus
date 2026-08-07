@@ -1,9 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Box, Typography, Paper, Button, Alert, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, Chip, Stack,
-  Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  Grid, Tooltip, IconButton
+  Dialog, DialogTitle, DialogContent, DialogActions, TextField, Tooltip, IconButton
 } from "@mui/material";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import Checkbox from "@mui/material/Checkbox";
@@ -37,6 +36,9 @@ export default function WelfareApplicationReview({ officerDept, onError, onLoadi
   const [bulkLoading, setBulkLoading] = useState(false);
   const [approveTarget, setApproveTarget] = useState<SchemeApplication | null>(null);
   const [approvalRemarks, setApprovalRemarks] = useState("");
+  const [newSinceLastVisit, setNewSinceLastVisit] = useState(0);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const lastKnownPendingCount = useRef<number | null>(null);
 
   useEffect(() => { loadSchemes(); }, []);
   useEffect(() => { if (selectedScheme) loadApplications(selectedScheme as number); }, [selectedScheme]);
@@ -54,7 +56,13 @@ export default function WelfareApplicationReview({ officerDept, onError, onLoadi
   const loadApplications = async (schemeId: number) => {
     try {
       const res = await api.get(`/api/welfare/applications/scheme/${schemeId}/pending`);
-      setApplications(res.data);
+      const pending: SchemeApplication[] = res.data;
+      if (lastKnownPendingCount.current !== null && pending.length > lastKnownPendingCount.current) {
+        setNewSinceLastVisit(pending.length - lastKnownPendingCount.current);
+        setBannerDismissed(false);
+      }
+      lastKnownPendingCount.current = pending.length;
+      setApplications(pending);
     } catch { onError("Failed to load applications"); }
   };
 
@@ -91,7 +99,8 @@ export default function WelfareApplicationReview({ officerDept, onError, onLoadi
     } catch { onError("Failed to open document"); }
   };
 
-  const approve = (id: number, name: string, app: SchemeApplication) => {
+  const approve = (_id: number, _name: string, app: SchemeApplication) => {
+    
     setApproveTarget(app);
     setApprovalRemarks("");
   };
@@ -171,6 +180,12 @@ export default function WelfareApplicationReview({ officerDept, onError, onLoadi
 
   return (
     <Box>
+      {newSinceLastVisit > 0 && !bannerDismissed && (
+        <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}
+          onClose={() => { setBannerDismissed(true); setNewSinceLastVisit(0); }}>
+          <strong>{newSinceLastVisit} new welfare application{newSinceLastVisit > 1 ? "s" : ""}</strong> received since your last visit
+        </Alert>
+      )}
       {/* Header */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2.5 }}>
         <Box sx={{ width: 44, height: 44, borderRadius: 2.5, background: "linear-gradient(135deg, #0F2557, #1A3A8F)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>

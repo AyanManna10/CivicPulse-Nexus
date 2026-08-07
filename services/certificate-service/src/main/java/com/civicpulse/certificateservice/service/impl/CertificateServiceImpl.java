@@ -188,9 +188,9 @@ public class CertificateServiceImpl implements CertificateService {
         Certificate saved = repository.save(cert);
 
         try {
-            pdfGenerator.generate(saved);
-        } catch (IOException e) {
-            throw new UncheckedIOException("PDF generation failed for cert " + id, e);
+            pdfGenerator.generateCertificatePdf(saved);
+        } catch (Exception e) {
+            throw new RuntimeException("PDF generation failed for cert " + id, e);
         }
 
         try {
@@ -218,7 +218,9 @@ public class CertificateServiceImpl implements CertificateService {
         repository.save(cert);
 
         try {
-            return pdfGenerator.getPdfBytes(cert);
+            java.nio.file.Path pdfPath = java.nio.file.Paths.get(
+                "C:/Project/uploads/certificates", cert.getCertificateNumber() + ".pdf");
+            return java.nio.file.Files.readAllBytes(pdfPath);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read certificate PDF for cert " + id, e);
         }

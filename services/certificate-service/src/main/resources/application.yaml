@@ -43,3 +43,6 @@ springdoc:
 app:
   upload:
     certificate-docs: C:/Project/uploads/certificate-docs
+certificate:
+  pdf:
+    output-path: C:/Project/uploads/certificates    
