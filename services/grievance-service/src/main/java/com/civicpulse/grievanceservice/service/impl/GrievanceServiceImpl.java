@@ -30,15 +30,11 @@ public class GrievanceServiceImpl implements GrievanceService {
 
     @Override
     public GrievanceResponse createGrievance(GrievanceRequest request) {
-
         Grievance grievance = new Grievance();
-
         grievance.setCitizenId(request.getCitizenId());
         grievance.setDepartment(request.getDepartment());
         grievance.setTitle(request.getTitle());
         grievance.setDescription(request.getDescription());
-
-        // Only override the entity's default "MEDIUM" if the client actually sent one
         if (request.getPriority() != null && !request.getPriority().isBlank()) {
             grievance.setPriority(request.getPriority());
         }
@@ -47,81 +43,83 @@ public class GrievanceServiceImpl implements GrievanceService {
 
         grievanceEventProducer.publishGrievanceCreated(
                 new GrievanceCreatedEvent(saved.getId(), saved.getCitizenId(),
-                        saved.getDepartment(), saved.getStatus())
-        );
+                        saved.getDepartment(), saved.getStatus()));
 
         return mapToResponse(saved);
     }
 
     @Override
     public List<GrievanceResponse> getAllGrievances() {
-        return grievanceRepository.findAll()
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
+        return grievanceRepository.findAll().stream().map(this::mapToResponse).toList();
     }
 
     @Override
     public GrievanceResponse getGrievanceById(Long id) {
-        Grievance grievance = grievanceRepository.findById(id)
-                .orElseThrow(() -> new GrievanceNotFoundException(id));
-        return mapToResponse(grievance);
+        return mapToResponse(findOrThrow(id));
     }
 
     @Override
     public GrievanceResponse updateGrievance(Long id, GrievanceRequest request) {
-
-        Grievance grievance = grievanceRepository.findById(id)
-                .orElseThrow(() -> new GrievanceNotFoundException(id));
-
+        Grievance grievance = findOrThrow(id);
         grievance.setDepartment(request.getDepartment());
         grievance.setTitle(request.getTitle());
         grievance.setDescription(request.getDescription());
-
         if (request.getPriority() != null && !request.getPriority().isBlank()) {
             grievance.setPriority(request.getPriority());
         }
+        return mapToResponse(grievanceRepository.save(grievance));
+    }
+
+    @Override
+    public void deleteGrievance(Long id) {
+        if (!grievanceRepository.existsById(id)) throw new GrievanceNotFoundException(id);
+        grievanceRepository.deleteById(id);
+    }
+
+    /**
+     * Assign (or RE-ASSIGN) a grievance to a department and officer.
+     *
+     * Key changes from original:
+     * 1. Reassignment is always allowed — no status guard blocks it.
+     * 2. A RESOLVED grievance is automatically REOPENED (set back to IN_PROGRESS)
+     *    when reassigned, creating a fresh audit trail.
+     * 3. OPEN grievances are promoted to IN_PROGRESS as before.
+     * 4. Already-IN_PROGRESS / ESCALATED grievances keep their status;
+     *    only the dept and officer are updated.
+     */
+    @Override
+    public GrievanceResponse assignGrievance(Long id, AssignRequest request) {
+        Grievance grievance = findOrThrow(id);
+
+        grievance.setDepartment(request.getDepartment());
+        grievance.setAssignedOfficer(request.getOfficer());
+
+        switch (grievance.getStatus()) {
+            case "OPEN":
+            case "RESOLVED":   // reopen a resolved grievance when reassigned
+            case "CLOSED":     // reopen a closed grievance when reassigned
+                grievance.setStatus("IN_PROGRESS");
+                grievance.setResolvedDate(null); // clear resolution date on reopen
+                break;
+            // ESCALATED, IN_PROGRESS → keep current status; only dept/officer change
+            default:
+                break;
+        }
 
         Grievance updated = grievanceRepository.save(grievance);
+
+        grievanceEventProducer.publishGrievanceAssigned(
+                new GrievanceAssignedEvent(updated.getId(), updated.getCitizenId(),
+                        updated.getDepartment(), updated.getAssignedOfficer()));
 
         return mapToResponse(updated);
     }
 
     @Override
-    public void deleteGrievance(Long id) {
-        if (!grievanceRepository.existsById(id)) {
-            throw new GrievanceNotFoundException(id);
-        }
-        grievanceRepository.deleteById(id);
-    }
-
-@Override
-public GrievanceResponse assignGrievance(Long id, AssignRequest request) {
-    Grievance grievance = grievanceRepository.findById(id)
-            .orElseThrow(() -> new GrievanceNotFoundException(id));
-    
-    grievance.setDepartment(request.getDepartment());
-    grievance.setAssignedOfficer(request.getOfficer());
-    
-    // Auto-change status to IN_PROGRESS when assigned
-    if ("OPEN".equals(grievance.getStatus())) {
-        grievance.setStatus("IN_PROGRESS");
-    }
-    
-    Grievance updated = grievanceRepository.save(grievance);
-    return mapToResponse(updated);
-}
-
-    @Override
     public GrievanceResponse changeStatus(Long id, StatusUpdateRequest request) {
-
-        Grievance grievance = grievanceRepository.findById(id)
-                .orElseThrow(() -> new GrievanceNotFoundException(id));
-
+        Grievance grievance = findOrThrow(id);
         grievance.setStatus(request.getStatus());
 
-        // RESOLVED and CLOSED both stamp a resolved date; anything else clears it,
-        // covering the case where an officer reopens a resolved complaint.
         if ("RESOLVED".equalsIgnoreCase(request.getStatus())
                 || "CLOSED".equalsIgnoreCase(request.getStatus())) {
             grievance.setResolvedDate(LocalDateTime.now());
@@ -134,8 +132,8 @@ public GrievanceResponse assignGrievance(Long id, AssignRequest request) {
         if ("RESOLVED".equalsIgnoreCase(updated.getStatus())
                 || "CLOSED".equalsIgnoreCase(updated.getStatus())) {
             grievanceEventProducer.publishGrievanceResolved(
-                    new GrievanceResolvedEvent(updated.getId(), updated.getCitizenId(), updated.getStatus())
-            );
+                    new GrievanceResolvedEvent(updated.getId(), updated.getCitizenId(),
+                            updated.getStatus()));
         }
 
         return mapToResponse(updated);
@@ -143,86 +141,74 @@ public GrievanceResponse assignGrievance(Long id, AssignRequest request) {
 
     @Override
     public GrievanceResponse escalateGrievance(Long id) {
-
-        Grievance grievance = grievanceRepository.findById(id)
-                .orElseThrow(() -> new GrievanceNotFoundException(id));
-
+        Grievance grievance = findOrThrow(id);
         grievance.setStatus("ESCALATED");
-
-        Grievance updated = grievanceRepository.save(grievance);
-
-        return mapToResponse(updated);
+        return mapToResponse(grievanceRepository.save(grievance));
     }
 
     @Override
     public List<GrievanceResponse> getByCitizen(Long citizenId) {
         return grievanceRepository.findByCitizenId(citizenId)
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
+                .stream().map(this::mapToResponse).toList();
     }
 
     @Override
     public List<GrievanceResponse> getByDepartment(String department) {
         return grievanceRepository.findByDepartment(department)
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
+                .stream().map(this::mapToResponse).toList();
     }
 
     @Override
     public List<GrievanceResponse> getByStatus(String status) {
         return grievanceRepository.findByStatus(status)
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
+                .stream().map(this::mapToResponse).toList();
     }
 
     @Override
     public List<GrievanceResponse> getOverdueGrievances() {
         List<String> openStatuses = List.of("OPEN", "ASSIGNED", "IN_PROGRESS");
         return grievanceRepository.findByStatusInAndDueDateBefore(openStatuses, LocalDateTime.now())
-                .stream()
-                .map(this::mapToResponse)
-                .toList();
+                .stream().map(this::mapToResponse).toList();
     }
 
     @Override
     public Map<String, Object> getDashboardStats() {
-
         List<Grievance> all = grievanceRepository.findAll();
-
-        long open = all.stream().filter(g -> "OPEN".equalsIgnoreCase(g.getStatus())).count();
-        long resolved = all.stream().filter(g -> "RESOLVED".equalsIgnoreCase(g.getStatus())).count();
-        long pending = all.stream().filter(g -> "IN_PROGRESS".equalsIgnoreCase(g.getStatus())).count();
+        long open      = all.stream().filter(g -> "OPEN".equalsIgnoreCase(g.getStatus())).count();
+        long resolved  = all.stream().filter(g -> "RESOLVED".equalsIgnoreCase(g.getStatus())).count();
+        long pending   = all.stream().filter(g -> "IN_PROGRESS".equalsIgnoreCase(g.getStatus())).count();
         long escalated = all.stream().filter(g -> "ESCALATED".equalsIgnoreCase(g.getStatus())).count();
 
         Map<String, Object> stats = new HashMap<>();
-        stats.put("total", all.size());
-        stats.put("open", open);
-        stats.put("resolved", resolved);
-        stats.put("pending", pending);
+        stats.put("total",     all.size());
+        stats.put("open",      open);
+        stats.put("resolved",  resolved);
+        stats.put("pending",   pending);
         stats.put("escalated", escalated);
-
         return stats;
     }
 
-    private GrievanceResponse mapToResponse(Grievance grievance) {
-        GrievanceResponse response = new GrievanceResponse();
+    // ── Private helpers ───────────────────────────────────────────────────────
 
-        response.setId(grievance.getId());
-        response.setCitizenId(grievance.getCitizenId());
-        response.setDepartment(grievance.getDepartment());
-        response.setTitle(grievance.getTitle());
-        response.setDescription(grievance.getDescription());
-        response.setPriority(grievance.getPriority());
-        response.setStatus(grievance.getStatus());
-        response.setAssignedOfficer(grievance.getAssignedOfficer());
-        response.setCreatedAt(grievance.getCreatedAt());
-        response.setUpdatedAt(grievance.getUpdatedAt());
-        response.setDueDate(grievance.getDueDate());
-        response.setResolvedDate(grievance.getResolvedDate());
+    private Grievance findOrThrow(Long id) {
+        return grievanceRepository.findById(id)
+                .orElseThrow(() -> new GrievanceNotFoundException(id));
+    }
 
-        return response;
+    private GrievanceResponse mapToResponse(Grievance g) {
+        GrievanceResponse r = new GrievanceResponse();
+        r.setId(g.getId());
+        r.setCitizenId(g.getCitizenId());
+        r.setDepartment(g.getDepartment());
+        r.setTitle(g.getTitle());
+        r.setDescription(g.getDescription());
+        r.setPriority(g.getPriority());
+        r.setStatus(g.getStatus());
+        r.setAssignedOfficer(g.getAssignedOfficer());
+        r.setCreatedAt(g.getCreatedAt());
+        r.setUpdatedAt(g.getUpdatedAt());
+        r.setDueDate(g.getDueDate());
+        r.setResolvedDate(g.getResolvedDate());
+        return r;
     }
 }

@@ -149,3 +149,6 @@ export function validateAadhaar(aadhaar: string): string {
   if (!/^\d{12}$/.test(aadhaar)) return "Aadhaar must be exactly 12 digits";
   return "";
 }
+export const Api = axios.create({
+  baseURL: "http://localhost:8085",
+});

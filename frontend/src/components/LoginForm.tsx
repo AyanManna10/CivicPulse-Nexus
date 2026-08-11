@@ -6,6 +6,10 @@ import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import ShieldIcon from "@mui/icons-material/Shield";
+import { useState } from "react";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
+import IconButton from "@mui/material/IconButton";
 
 interface Props {
   username: string; password: string; error: string; loading: boolean;
@@ -124,23 +128,42 @@ export default function LoginForm({
                   )}
                 }}
               />
-              <TextField
-                fullWidth
-                label="Password"
-                type="password"
-                value={password}
-                onChange={(e) => onPasswordChange(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && onLogin()}
-                sx={{ mb: 3 }}
-                slotProps={{
-                input: {
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <LockOutlinedIcon fontSize="small" sx={{ color: "#5A6072" }} />
-                    </InputAdornment>
-                  )}
-                }}
-              />
+              {/* Password with eye toggle */}
+              {(() => {
+                const [showPassword, setShowPassword] = useState(false);
+                return (
+                  <TextField
+                    fullWidth
+                    label="Password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => onPasswordChange(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && onLogin()}
+                    sx={{ mb: 3 }}
+                    slotProps={{
+                      input: {
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <LockOutlinedIcon fontSize="small" sx={{ color: "#5A6072" }} />
+                          </InputAdornment>
+                        ),
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton
+                              size="small"
+                              onClick={() => setShowPassword(!showPassword)}
+                              edge="end"
+                              sx={{ color: "#5A6072" }}
+                            >
+                              {showPassword ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                            </IconButton>
+                          </InputAdornment>
+                        )
+                      }
+                    }}
+                  />
+                );
+              })()}
 
               <Button
                 fullWidth

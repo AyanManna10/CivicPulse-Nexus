@@ -9,15 +9,17 @@ import java.util.Map;
 
 public interface CertificateService {
     CertificateResponse apply(CertificateRequest request, String appliedBy);
-    List<CertificateResponse> getAll();
-    CertificateResponse getById(Long id);
-    List<CertificateResponse> getByCitizen(Long citizenId);
-    List<CertificateResponse> getByStatus(CertificateStatus status);
-    List<CertificateResponse> search(String citizenName, CertificateStatus status, CertificateType type);
     CertificateResponse verify(Long id, VerificationRequest request, String officerUsername);
     CertificateResponse approve(Long id, String officerUsername);
-    CertificateResponse reject(Long id, RejectionRequest request, String officerUsername);
-    CertificateResponse generateCertificate(Long id);
+    CertificateResponse reject(Long id, DecisionRequest request, String officerUsername);
+    CertificateResponse generate(Long id, String officerUsername);
     byte[] downloadPdf(Long id);
+    CertificateResponse getById(Long id);
+    List<CertificateResponse> getAll();
+    List<CertificateResponse> getByDepartment(String department);
+    List<CertificateResponse> getByCitizen(Long citizenId);
+    List<CertificateResponse> getPending();
+    List<CertificateResponse> getByStatus(CertificateStatus status);
+    List<CertificateResponse> getByType(CertificateType type);
     Map<String, Long> getStats();
 }

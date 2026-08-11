@@ -1,5 +1,7 @@
 # Maven build output
 **/target/
+!**/src/main/**/target/
+!**/src/test/**/target/
 *.class
 *.jar
 *.war
@@ -16,6 +18,8 @@
 **/.next/
 **/dist/
 **/build/
+.vite/
+.eslintcache
 
 # Environment & secrets
 **/.env
@@ -30,7 +34,41 @@
 # OS files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Logs
 *.log
 logs/
+spring.log
+
+# ── Secrets (NEVER commit these) ──────────────────────────────────────────────
+.env
+*.env
+!.env.example
+
+# ── Uploaded user documents ────────────────────────────────────────────────────
+uploads/
+welfare-docs/
+**/uploads/
+
+
+.mvn/wrapper/maven-wrapper.jar
+
+# ── IDE ────────────────────────────────────────────────────────────────────────
+
+
+*.iws
+.project
+.classpath
+.settings/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+
+
+
+
+

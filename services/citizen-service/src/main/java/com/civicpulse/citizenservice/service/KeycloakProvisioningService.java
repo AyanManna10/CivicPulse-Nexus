@@ -1,5 +1,9 @@
 package com.civicpulse.citizenservice.service;
 
+import org.springframework.http.*;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
 import jakarta.ws.rs.core.Response;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.RealmResource;
@@ -17,6 +21,34 @@ import java.util.List;
 @Service
 public class KeycloakProvisioningService {
 
+    /**
+ * Verifies the user's current password by attempting a token request
+ * against Keycloak's token endpoint. Returns true if credentials are valid.
+ */
+public boolean verifyCurrentPassword(String username, String currentPassword) {
+    try {
+        RestTemplate restTemplate = new RestTemplate();
+        String tokenUrl = "http://localhost:8080/realms/" + targetRealm + "/protocol/openid-connect/token";
+
+        MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+        params.add("grant_type", "password");
+        params.add("client_id", "civicpulse-client");
+        params.add("client_secret", clientSecret);
+        params.add("username", username);
+        params.add("password", currentPassword);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(params, headers);
+        ResponseEntity<String> response = restTemplate.postForEntity(tokenUrl, request, String.class);
+        return response.getStatusCode() == HttpStatus.OK;
+    } catch (Exception e) {
+        log.warn("Password verification failed for {}: {}", username, e.getMessage());
+        return false;
+    }
+}
+
     private static final Logger log = LoggerFactory.getLogger(KeycloakProvisioningService.class);
 
     private final Keycloak keycloak;
@@ -26,6 +58,9 @@ public class KeycloakProvisioningService {
 
     @Value("${keycloak.admin.citizen-role}")
     private String citizenRole;
+
+    @Value("${keycloak.admin.client-secret}")
+    private String clientSecret;
 
     public KeycloakProvisioningService(Keycloak keycloak) {
         this.keycloak = keycloak;
@@ -147,4 +182,27 @@ public class KeycloakProvisioningService {
         String[] parts = fullName.trim().split("\\s+");
         return parts.length > 1 ? parts[parts.length - 1] : "";
     }
+    /**
+ * Changes the Keycloak password for the user with the given email.
+ * Used by the profile tab change-password feature.
+ */
+public void changeUserPassword(String email, String newPassword) {
+    RealmResource realmResource = keycloak.realm(targetRealm);
+    UsersResource usersResource = realmResource.users();
+
+    List<UserRepresentation> users = usersResource.searchByEmail(email, true);
+    if (users.isEmpty()) {
+        throw new RuntimeException("Keycloak user not found for email: " + email);
+    }
+
+    String userId = users.get(0).getId();
+
+    CredentialRepresentation credential = new CredentialRepresentation();
+    credential.setType(CredentialRepresentation.PASSWORD);
+    credential.setValue(newPassword);
+    credential.setTemporary(false);
+
+    usersResource.get(userId).resetPassword(credential);
+    log.info("Password changed in Keycloak for user: {}", email);
+}
 }

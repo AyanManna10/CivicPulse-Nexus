@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${SPRING_DATASOURCE_URL}
+    username: postgres
+    password: ${DB_PASSWORD}
+  
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:29092}
+  
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://keycloak:8080/realms/civicpulse
+          jwk-set-uri: http://keycloak:8080/realms/civicpulse/protocol/openid-connect/certs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+keycloak:
+  admin:
+    server-url: http://keycloak:8080

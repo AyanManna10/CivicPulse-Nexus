@@ -8,8 +8,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class GrievanceAssignedEvent {
-
     private Long grievanceId;
+    private Long citizenId;
     private String department;
     private String officer;
 }

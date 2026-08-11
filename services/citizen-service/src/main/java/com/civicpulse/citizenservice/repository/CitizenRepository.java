@@ -17,5 +17,7 @@ public interface CitizenRepository extends JpaRepository<Citizen, Long> {
     List<Citizen> findByFullNameContainingIgnoreCase(String name);
 
     Optional<Citizen> findByPhone(String phone);
+    boolean existsByEmail(String email);
     Optional<Citizen> findByEmail(String email);
+
 }

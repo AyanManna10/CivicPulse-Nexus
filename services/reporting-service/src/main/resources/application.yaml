@@ -1,0 +1,62 @@
+spring:
+  application:
+    name: reporting-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/civicpulse_db
+    username: postgres
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080/realms/civicpulse
+          jwk-set-uri: http://localhost:8080/realms/civicpulse/protocol/openid-connect/certs
+
+  cache:
+    type: caffeine
+
+server:
+  port: 8086
+
+services:
+  citizen-url:     http://localhost:8082
+  grievance-url:   http://localhost:8083
+  certificate-url: http://localhost:8084
+  welfare-url:     http://localhost:8085
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    root: INFO
+    com.civicpulse.reportingservice: DEBUG
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+groq:
+  api:
+    key: ${GROQ_API_KEY}
+    model: llama-3.3-70b-versatile
+ai:
+  daily-limit: 3    
+  report-daily-limit: 20 

@@ -20,6 +20,7 @@ public class CertificateResponse {
     private String aadhaarNumber;
     private CertificateType certificateType;
     private CertificateStatus status;
+    private String assignedDepartment;
     private String appliedBy;
     private String verifiedBy;
     private String decidedBy;

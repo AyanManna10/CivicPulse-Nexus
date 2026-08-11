@@ -23,50 +23,51 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
         http
-                .csrf(csrf -> csrf.disable())
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+            .csrf(csrf -> csrf.disable())
+            .sessionManagement(session ->
+                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
-                        // Public self-registration & auth helpers
-                        .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
-                        .requestMatchers(HttpMethod.GET,  "/api/auth/check-email").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/auth/validate-password").permitAll()
+                // ── Public endpoints — no token required ──────────────────
+                .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
+                .requestMatchers(HttpMethod.GET,  "/api/auth/check-email").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/auth/validate-password").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/citizens/register").permitAll()
+                .requestMatchers(HttpMethod.GET,  "/api/citizens/check-email").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/citizens/pending/*/documents").permitAll()
+                .requestMatchers(HttpMethod.GET,  "/api/citizens/documents/*/view").permitAll()
 
-                        // Citizen: resolve own profile from JWT (no manual ID needed)
-                        .requestMatchers(HttpMethod.GET, "/api/citizens/me").hasAnyRole("CITIZEN", "ADMIN", "OFFICER")
+                // ── Pending registrations — Officer/Admin only ────────────
+                .requestMatchers(HttpMethod.GET,  "/api/citizens/pending").hasAnyRole("ADMIN", "OFFICER")
+                .requestMatchers(HttpMethod.POST, "/api/citizens/pending/*/approve").hasAnyRole("ADMIN", "OFFICER")
+                .requestMatchers(HttpMethod.POST, "/api/citizens/pending/*/reject").hasAnyRole("ADMIN", "OFFICER")
+                .requestMatchers(HttpMethod.GET,  "/api/citizens/pending/*/documents").hasAnyRole("ADMIN", "OFFICER")
 
-                        // Citizens: read-only access to citizen list so they can look up their own record
-                        .requestMatchers(HttpMethod.GET, "/api/citizens/**").hasAnyRole("CITIZEN", "ADMIN", "OFFICER")
+                // ── Citizen profile ───────────────────────────────────────
+                .requestMatchers(HttpMethod.GET, "/api/citizens/me").hasAnyRole("CITIZEN", "ADMIN", "OFFICER")
+                .requestMatchers(HttpMethod.GET, "/api/citizens/**").hasAnyRole("CITIZEN", "ADMIN", "OFFICER")
+                .requestMatchers(HttpMethod.POST, "/api/citizens").hasAnyRole("ADMIN", "OFFICER")
+                .requestMatchers(HttpMethod.PUT,  "/api/citizens/**").hasAnyRole("ADMIN", "OFFICER")
+                .requestMatchers(HttpMethod.DELETE, "/api/citizens/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/citizens/change-password").authenticated()
+                
+                // ── Officer management ────────────────────────────────────
+                .requestMatchers(HttpMethod.POST,   "/api/officers").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT,    "/api/officers/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/officers/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET,    "/api/officers/**").hasAnyRole("ADMIN", "OFFICER")
 
-                        // Officers / Admins: create & update citizens
-                        .requestMatchers(HttpMethod.POST, "/api/citizens").hasAnyRole("ADMIN", "OFFICER")
-                        .requestMatchers(HttpMethod.PUT,  "/api/citizens/**").hasAnyRole("ADMIN", "OFFICER")
-
-                        // Admin only: delete citizens
-                        .requestMatchers(HttpMethod.DELETE, "/api/citizens/**").hasRole("ADMIN")
-
-                        // Officer management — Admin creates/updates; Officers & Admins can read
-                        .requestMatchers(HttpMethod.POST,   "/api/officers").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT,    "/api/officers/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/officers/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET,    "/api/officers/**").hasAnyRole("ADMIN", "OFFICER")
-
-                        .anyRequest().authenticated()
-                )
-                .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakJwtConverter()))
-                );
+                .anyRequest().authenticated()
+            )
+            .oauth2ResourceServer(oauth2 -> oauth2
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakJwtConverter()))
+            );
 
         return http.build();
     }
 
-    /**
-     * Extracts realm-level roles from the Keycloak JWT claim
-     * `realm_access.roles` and maps them to Spring's ROLE_XXX convention.
-     */
     private JwtAuthenticationConverter keycloakJwtConverter() {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(this::extractRealmRoles);
@@ -81,7 +82,7 @@ public class SecurityConfig {
         }
         List<String> roles = (List<String>) realmAccess.get("roles");
         return roles.stream()
-                .map(role -> new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()))
-                .collect(Collectors.toList());
+            .map(role -> new SimpleGrantedAuthority("ROLE_" + role.toUpperCase()))
+            .collect(Collectors.toList());
     }
 }

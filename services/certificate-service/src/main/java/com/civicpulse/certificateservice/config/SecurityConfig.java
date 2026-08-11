@@ -47,6 +47,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/certificates/pending").hasAnyRole("ADMIN", "OFFICER")
                         .requestMatchers(HttpMethod.GET, "/api/certificates/status/**").hasAnyRole("ADMIN", "OFFICER")
                         .requestMatchers(HttpMethod.GET, "/api/certificates/type/**").hasAnyRole("ADMIN", "OFFICER")
+                        .requestMatchers(HttpMethod.GET, "/api/certificates/documents/*/view").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/certificates/*/documents").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/certificates/*/documents").hasAnyRole("ADMIN", "OFFICER")
 
                         .anyRequest().authenticated()
                 )
