@@ -17,11 +17,11 @@ import java.time.Year;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 @Service
 public class CertificateServiceImpl implements CertificateService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(CertificateServiceImpl.class);
     private final CertificateRepository repository;
     private final CertificatePdfGenerator pdfGenerator;
     private final CertificateEventProducer eventProducer;
@@ -213,13 +213,24 @@ public class CertificateServiceImpl implements CertificateService {
             throw new IllegalStateException("Certificate PDF not yet available.");
         }
 
+        java.nio.file.Path pdfPath = java.nio.file.Paths.get(
+                "C:/Project/uploads/certificates", cert.getCertificateNumber() + ".pdf");
+
+        // Regenerate if file is missing (e.g. server restart wiped uploads dir)
+        if (!java.nio.file.Files.exists(pdfPath)) {
+            log.warn("PDF missing for cert {}, regenerating...", cert.getCertificateNumber());
+            try {
+                pdfGenerator.generateCertificatePdf(cert);
+            } catch (Exception e) {
+                throw new RuntimeException("PDF regeneration failed for cert " + id, e);
+            }
+        }
+
         cert.setDownloadCount(cert.getDownloadCount() + 1);
         cert.setStatus(CertificateStatus.DOWNLOADED);
         repository.save(cert);
 
         try {
-            java.nio.file.Path pdfPath = java.nio.file.Paths.get(
-                "C:/Project/uploads/certificates", cert.getCertificateNumber() + ".pdf");
             return java.nio.file.Files.readAllBytes(pdfPath);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to read certificate PDF for cert " + id, e);

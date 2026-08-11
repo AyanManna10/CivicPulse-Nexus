@@ -1,4 +1,6 @@
 package com.civicpulse.reportingservice.service;
+
+import org.springframework.cache.annotation.Cacheable;
 import com.civicpulse.reportingservice.dto.AnalyticsSummaryDto;
 import com.civicpulse.reportingservice.dto.AnalyticsSummaryDto.*;
 import org.slf4j.Logger;
@@ -16,6 +18,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
+
 @Service
 public class AnalyticsService {
 
@@ -32,6 +35,7 @@ public class AnalyticsService {
         this.restTemplate = restTemplate;
     }
 
+    @Cacheable(value = "analytics-summary", key = "'summary'")
     public AnalyticsSummaryDto buildSummary(String authToken) {
         log.info("Building analytics summary");
 
@@ -68,7 +72,15 @@ public class AnalyticsService {
         long resolvedGrievances = grievances.stream()
                 .filter(g -> "RESOLVED".equals(g.get("status")) || "CLOSED".equals(g.get("status"))).count();
         long overdueGrievances  = grievances.stream()
-                .filter(g -> "OVERDUE".equals(g.get("status"))).count();
+        .filter(g -> {
+            Object due = g.get("dueDate");
+            Object status = g.get("status");
+            if (due == null || "RESOLVED".equals(status) || "CLOSED".equals(status)) return false;
+            try {
+                LocalDate dueDate = LocalDate.parse(due.toString().substring(0, 10));
+                return dueDate.isBefore(LocalDate.now());
+            } catch (Exception e) { return false; }
+        }).count();
         long openGrievances     = totalGrievances - resolvedGrievances;
 
         double slaPercent = totalGrievances > 0 ? (resolvedGrievances * 100.0 / totalGrievances) : 0.0;
@@ -204,7 +216,15 @@ public class AnalyticsService {
             long resolved = deptGrievances.stream()
                     .filter(g -> "RESOLVED".equals(g.get("status")) || "CLOSED".equals(g.get("status"))).count();
             long breaches = deptGrievances.stream()
-                    .filter(g -> "OVERDUE".equals(g.get("status"))).count();
+        .filter(g -> {
+            Object due = g.get("dueDate");
+            Object status = g.get("status");
+            if (due == null || "RESOLVED".equals(status) || "CLOSED".equals(status)) return false;
+            try {
+                LocalDate dueDate = LocalDate.parse(due.toString().substring(0, 10));
+                return dueDate.isBefore(LocalDate.now());
+            } catch (Exception e) { return false; }
+        }).count();
             double resRate = total > 0 ? (resolved * 100.0 / total) : 0.0;
             double avgDays = deptGrievances.stream()
                     .filter(g -> g.get("resolvedDate") != null && g.get("createdAt") != null)

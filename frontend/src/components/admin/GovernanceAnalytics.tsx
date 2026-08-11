@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Box, Typography, Paper, Grid, Button, Alert, Chip, Skeleton,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  LinearProgress, Divider, Tooltip
+  LinearProgress, Divider, Tooltip,
+  Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress
 } from "@mui/material";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -18,11 +19,21 @@ import GavelIcon from "@mui/icons-material/Gavel";
 import GroupsIcon from "@mui/icons-material/Groups";
 import VerifiedIcon from "@mui/icons-material/Verified";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import { api } from "../../api";
 
 interface Props {
   onError: (msg: string) => void;
   onLoadingChange: (v: boolean) => void;
+}
+
+interface AIResponse {
+  summary: string;
+  performance: "Excellent" | "Good" | "Needs Improvement";
+  recommendations: string[];
+  riskAssessment: string;
+  timestamp: number;
 }
 
 interface AnalyticsSummaryDto {
@@ -136,6 +147,11 @@ export default function GovernanceAnalytics({ onError, onLoadingChange }: Props)
   const [loading, setLoading] = useState(true);
   const [failed, setFailed]   = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [aiLoading, setAiLoading]     = useState(false);
+  const [aiOpen, setAiOpen]           = useState(false);
+  const [aiData, setAiData]           = useState<AIResponse | null>(null);
+  const [aiUsed, setAiUsed]           = useState(0);
+  const AI_LIMIT                       = 3;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -155,6 +171,51 @@ export default function GovernanceAnalytics({ onError, onLoadingChange }: Props)
   }, []);
 
   useEffect(() => { load(); }, []);
+
+  const handleAIInsights = async () => {
+    if (!data) return;
+    if (aiUsed >= AI_LIMIT) {
+      onError(`Daily AI Insights limit of ${AI_LIMIT} reached. Resets at midnight.`);
+      return;
+    }
+    setAiLoading(true);
+    try {
+      const sorted = [...data.departmentPerformances].sort((a, b) => b.resolutionRate - a.resolutionRate);
+      const payload = {
+        totalComplaints:            data.totalGrievances,
+        resolvedComplaints:         data.resolvedGrievances,
+        pendingComplaints:          data.openGrievances,
+        openComplaints:             data.openGrievances,
+        resolutionRate:             data.serviceSlaPercent,
+        slaCompliancePercent:       data.serviceSlaPercent,
+        overdueComplaints:          data.overdueGrievances,
+        avgResolutionDays:          data.avgResolutionDays,
+        topDepartment:              sorted[0]?.department ?? "",
+        lowestPerformingDepartment: sorted[sorted.length - 1]?.department ?? "",
+      };
+      const res = await api.post("/api/analytics/analyze-complaints", payload);
+      setAiData(res.data);
+      setAiUsed(prev => prev + 1);
+      setAiOpen(true);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? err?.message ?? "";
+      if (msg.toLowerCase().includes("limit")) {
+        setAiUsed(AI_LIMIT);
+        onError(`Daily AI Insights limit of ${AI_LIMIT} reached. Resets at midnight.`);
+      } else {
+        onError("AI Insights unavailable. Check reporting-service.");
+      }
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleExportPDF = () => { window.print(); };
+
+  const perfColor = (p: string) =>
+    p === "Excellent" ? "#2E7D32" : p === "Good" ? "#1565C0" : "#C62828";
+  const perfBg = (p: string) =>
+    p === "Excellent" ? "#E8F5E9" : p === "Good" ? "#E3F2FD" : "#FFEBEE";
 
   // Merge grievance + certificate monthly data for trend chart
   const trendData = data
@@ -181,10 +242,27 @@ export default function GovernanceAnalytics({ onError, onLoadingChange }: Props)
             </Typography>
           </Box>
         </Box>
-        <Button variant="outlined" size="small" startIcon={<RefreshIcon />}
-          onClick={load} disabled={loading}>
-          Refresh
-        </Button>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          <Button className="no-print" variant="outlined" size="small"
+            startIcon={<RefreshIcon />} onClick={load} disabled={loading}>
+            Refresh
+          </Button>
+          <Tooltip title={aiUsed >= AI_LIMIT ? "Daily limit reached. Resets at midnight." : `${AI_LIMIT - aiUsed} of ${AI_LIMIT} uses remaining today`}>
+            <span>
+              <Button className="no-print" variant="outlined" size="small" color="secondary"
+                startIcon={aiLoading ? <CircularProgress size={14} /> : <AutoAwesomeIcon />}
+                onClick={handleAIInsights}
+                disabled={loading || !data || aiLoading || aiUsed >= AI_LIMIT}
+                sx={aiUsed >= AI_LIMIT ? { borderColor: "#9AA3B5", color: "#9AA3B5" } : {}}>
+                AI Insights {aiUsed > 0 ? `(${aiUsed}/${AI_LIMIT})` : ""}
+              </Button>
+            </span>
+          </Tooltip>
+          <Button className="no-print" variant="outlined" size="small" color="error"
+            startIcon={<PictureAsPdfIcon />} onClick={handleExportPDF}>
+            Export PDF
+          </Button>
+        </Box>
       </Box>
 
       {failed && (
@@ -561,6 +639,78 @@ export default function GovernanceAnalytics({ onError, onLoadingChange }: Props)
           </Paper>
         </Grid>
       </Grid>
+    {/* Print styles */}
+      <style>{`@media print { .no-print { display: none !important; } }`}</style>
+
+      {/* AI Insights Dialog */}
+      <Dialog open={aiOpen} onClose={() => setAiOpen(false)}
+        disableRestoreFocus maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1,
+          bgcolor: "#0F2557", color: "#fff" }}>
+          <AutoAwesomeIcon fontSize="small" />
+          AI Governance Insights
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2.5 }}>
+          {aiData && (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {/* Performance chip */}
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600, color: "#5A6072" }}>
+                  Overall Performance:
+                </Typography>
+                <Chip label={aiData.performance}
+                  sx={{ fontWeight: 700, bgcolor: perfBg(aiData.performance),
+                    color: perfColor(aiData.performance) }} />
+              </Box>
+
+              {/* Summary */}
+              <Box>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: "#0F2557",
+                  textTransform: "uppercase", letterSpacing: 0.8 }}>
+                  Summary
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 0.5, lineHeight: 1.7 }}>
+                  {aiData.summary}
+                </Typography>
+              </Box>
+
+              {/* Recommendations */}
+              <Box>
+                <Typography variant="caption" sx={{ fontWeight: 700, color: "#0F2557",
+                  textTransform: "uppercase", letterSpacing: 0.8 }}>
+                  Recommendations
+                </Typography>
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1, mt: 0.5 }}>
+                  {aiData.recommendations.map((r, i) => (
+                    <Box key={i} sx={{ display: "flex", gap: 1.5, p: 1.5,
+                      bgcolor: "#E8EDFB", borderRadius: 1.5, alignItems: "flex-start" }}>
+                      <Typography variant="caption" sx={{ fontWeight: 800,
+                        color: "#1A3A8F", minWidth: 20 }}>{i + 1}.</Typography>
+                      <Typography variant="body2" sx={{ lineHeight: 1.6 }}>{r}</Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+
+              {/* Risk Assessment */}
+              <Alert severity="warning" sx={{ borderRadius: 1.5 }}>
+                <Typography variant="caption" sx={{ fontWeight: 700, display: "block", mb: 0.5 }}>
+                  Risk Assessment
+                </Typography>
+                <Typography variant="body2">{aiData.riskAssessment}</Typography>
+              </Alert>
+
+              {/* Timestamp */}
+              <Typography variant="caption" color="text.secondary" sx={{ textAlign: "right" }}>
+                Generated: {new Date(aiData.timestamp).toLocaleString("en-IN")}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAiOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

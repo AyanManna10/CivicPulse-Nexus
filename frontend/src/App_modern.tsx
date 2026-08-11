@@ -12,6 +12,7 @@ import HistoryIcon from "@mui/icons-material/History";
 import NotificationPanel from "./components/shared/NotificationPanel";
 import GovernanceAnalytics from "./components/admin/GovernanceAnalytics";
 import AnalyticsIcon from "@mui/icons-material/Analytics";
+import AIReportsPage from "./components/admin/AIReportsPage";
 import {
   Typography, Alert, Button, Box, Chip, Divider, Grid, Paper,
   LinearProgress, Tooltip, Avatar, Badge
@@ -55,7 +56,6 @@ import OfficerManagement      from "./components/admin/OfficerManagement";
 import DeptOfficerManagement  from "./components/officer/DeptOfficerManagement";
 import ProfileTab             from "./components/ProfileTab";
 import RegisterCitizenPage    from "./components/admin/RegisterCitizenPage";
-import ReportsPage            from "./components/admin/ReportsPage";
 import CitizenApplyScheme from "./components/citizen/CitizenApplyScheme";
 import { usePollingNotifications } from "./hooks/usePollingNotifications";
 import CitizenMyBenefits from "./components/citizen/CitizenMyBenefits";
@@ -516,7 +516,7 @@ export default function App() {
   const [loggedIn, setLoggedIn]   = useState(false);
   const [error, setError]         = useState("");
   const [loading, setLoading]     = useState(false);
-  const [tab, setTab]             = useState("dashboard");
+  const [tab, setTab] = useState(() => localStorage.getItem("lastTab") ?? "dashboard");
   const [showRegistration, setShowRegistration] = useState(false);
   const [citizenAlertCount, setCitizenAlertCount] = useState(0);
 
@@ -809,6 +809,7 @@ export default function App() {
     setOfficerProfile(null); officerProfileRef.current = null;
     citizenProfileRef.current = null;
     setError(""); setTab("dashboard");
+    localStorage.removeItem("lastTab");
   };
   /**
    * Refresh: re-loads data with the same dept scoping as loadAll.
@@ -894,7 +895,7 @@ export default function App() {
     <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#F0F2F8" }}>
       <Sidebar
         tab={tab}
-        onTabChange={setTab}
+        onTabChange={(t) => { setTab(t); localStorage.setItem("lastTab", t); }}
         roleConfig={roleConfig}
         username={currentUsername}
         overdueCount={overdue.length}
@@ -1308,7 +1309,7 @@ export default function App() {
               )}
 
               {tab === "reports" && isAdmin && (
-                <ReportsPage certStats={certStats} grievances={grievances} />
+                <AIReportsPage />
               )}
 
               {tab === "welfare-schemes" && (

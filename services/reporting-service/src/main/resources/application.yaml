@@ -9,6 +9,7 @@ spring:
     driver-class-name: org.postgresql.Driver
 
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: validate
     properties:
@@ -23,10 +24,12 @@ spring:
           issuer-uri: http://localhost:8080/realms/civicpulse
           jwk-set-uri: http://localhost:8080/realms/civicpulse/protocol/openid-connect/certs
 
+  cache:
+    type: caffeine
+
 server:
   port: 8086
 
-# URLs of other services — reporting-service calls these to aggregate data
 services:
   citizen-url:     http://localhost:8082
   grievance-url:   http://localhost:8083
@@ -50,3 +53,10 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     enabled: true
+groq:
+  api:
+    key: ${GROQ_API_KEY}
+    model: llama-3.3-70b-versatile
+ai:
+  daily-limit: 3    
+  report-daily-limit: 20 
